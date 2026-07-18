@@ -74,6 +74,13 @@ export default function HomePage() {
     try {
       const result = await api.runPreset(presetId);
       if (result.conversation_id) setConversationId(result.conversation_id);
+      const preset = presets.find((p) => p.id === presetId);
+      if (preset?.vignette) {
+        sessionStorage.setItem(
+          "vedya_input",
+          JSON.stringify({ ...preset.vignette, locale })
+        );
+      }
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       router.push("/results");
     } catch (e) {
@@ -96,6 +103,17 @@ export default function HomePage() {
         locale,
       });
       if (result.conversation_id) setConversationId(result.conversation_id);
+      sessionStorage.setItem(
+        "vedya_input",
+        JSON.stringify({
+          free_text: freeText,
+          symptoms: [],
+          rogas: [],
+          comorbidities: [],
+          top_k: 10,
+          locale,
+        })
+      );
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       router.push("/results");
     } catch (e) {

@@ -17,6 +17,7 @@ import PrimaryButton from "@/components/PrimaryButton";
 import CitationCard from "@/components/CitationCard";
 import ListenButton from "@/components/ListenButton";
 import VoiceMic from "@/components/VoiceMic";
+import CounterfactualPanel from "@/components/CounterfactualPanel";
 import { useApp } from "@/lib/app-context";
 import Link from "next/link";
 
@@ -176,8 +177,10 @@ function ResultsContent() {
   const handleIntakeSubmit = useCallback(async (inp: VignetteInput) => {
     setLoading(true);
     try {
-      const result = await api.recommend({ ...inp, locale });
+      const payload = { ...inp, locale };
+      const result = await api.recommend(payload);
       if (result.conversation_id) setConversationId(result.conversation_id);
+      sessionStorage.setItem("vedya_input", JSON.stringify(payload));
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       setResponse(result);
       setShowIntake(false);
@@ -327,6 +330,14 @@ function ResultsContent() {
             )}
           </div>
         )}
+
+        <CounterfactualPanel
+          baseline={response}
+          onApplied={(next) => {
+            setResponse(next);
+            if (next.conversation_id) setConversationId(next.conversation_id);
+          }}
+        />
 
         {/* 3. Compare teaser */}
         {activeResults.length >= 2 && (
