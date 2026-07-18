@@ -18,6 +18,7 @@ import CitationCard from "@/components/CitationCard";
 import ListenButton from "@/components/ListenButton";
 import VoiceMic from "@/components/VoiceMic";
 import CounterfactualPanel from "@/components/CounterfactualPanel";
+import ShareCaseBar, { decodeCaseParam } from "@/components/ShareCaseBar";
 import { useApp } from "@/lib/app-context";
 import Link from "next/link";
 
@@ -165,6 +166,27 @@ function ResultsContent() {
       setLoading(false);
       return;
     }
+
+    const caseParam = searchParams.get("case");
+    if (caseParam) {
+      const decoded = decodeCaseParam(caseParam);
+      if (decoded) {
+        setLoading(true);
+        const payload = { ...decoded, locale: decoded.locale || locale };
+        sessionStorage.setItem("vedya_input", JSON.stringify(payload));
+        api
+          .recommend(payload)
+          .then((result) => {
+            if (result.conversation_id) setConversationId(result.conversation_id);
+            sessionStorage.setItem("vedya_results", JSON.stringify(result));
+            setResponse(result);
+          })
+          .catch(console.error)
+          .finally(() => setLoading(false));
+        return;
+      }
+    }
+
     const stored = sessionStorage.getItem("vedya_results");
     if (stored) {
       const parsed = JSON.parse(stored) as RecommendationResponse;
@@ -172,7 +194,7 @@ function ResultsContent() {
       if (parsed.conversation_id) setConversationId(parsed.conversation_id);
     }
     setLoading(false);
-  }, [searchParams, setConversationId]);
+  }, [searchParams, setConversationId, locale]);
 
   const handleIntakeSubmit = useCallback(async (inp: VignetteInput) => {
     setLoading(true);
@@ -207,6 +229,19 @@ function ResultsContent() {
       });
       if (result.conversation_id) setConversationId(result.conversation_id);
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
+      sessionStorage.setItem(
+        "vedya_input",
+        JSON.stringify({
+          free_text: followUp.trim(),
+          symptoms: [],
+          rogas: [],
+          comorbidities: [],
+          top_k: 10,
+          locale,
+          conversation_id: result.conversation_id,
+          follow_up: true,
+        })
+      );
       setResponse(result);
       setFollowUp("");
     } catch (e) {
@@ -422,17 +457,20 @@ function ResultsContent() {
             {user ? t("followUpHint") : t("loginToContinue")}
           </p>
           {user ? (
-            <div className="flex gap-2">
-              <input
-                className="veda-input flex-1"
-                value={followUp}
-                onChange={(e) => setFollowUp(e.target.value)}
-                placeholder={t("followUpPlaceholder")}
-                onKeyDown={(e) => e.key === "Enter" && askFollowUp()}
-              />
-              <PrimaryButton onClick={askFollowUp} disabled={asking || !followUp.trim()}>
-                {asking ? t("running") : t("askFollowUp")}
-              </PrimaryButton>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  className="veda-input flex-1"
+                  value={followUp}
+                  onChange={(e) => setFollowUp(e.target.value)}
+                  placeholder={t("followUpPlaceholder")}
+                  onKeyDown={(e) => e.key === "Enter" && askFollowUp()}
+                />
+                <PrimaryButton onClick={askFollowUp} disabled={asking || !followUp.trim()}>
+                  {asking ? t("running") : t("askFollowUp")}
+                </PrimaryButton>
+              </div>
+              <VoiceMic onTranscript={(text) => setFollowUp((prev) => (prev ? `${prev} ${text}` : text))} />
             </div>
           ) : (
             <Link href="/login" style={{ color: "var(--veda-harita)", fontSize: "0.9rem" }}>
@@ -440,6 +478,8 @@ function ResultsContent() {
             </Link>
           )}
         </div>
+
+        <ShareCaseBar response={response} />
 
         {/* Stats */}
         <div className="mt-8 grid grid-cols-3 gap-4 text-center">

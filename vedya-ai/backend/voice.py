@@ -5,18 +5,36 @@ Uses REST via httpx so we do not require the ElevenLabs SDK.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Optional
 
 import httpx
+from dotenv import load_dotenv
 
-ELEVEN_API_KEY = os.getenv("ELEVENLABS_API_KEY", "").strip()
+# Load vedya-ai/.env then backend/.env if present
+_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(_ROOT / ".env")
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 ELEVEN_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 ELEVEN_STT_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 
-# Public multilingual-capable default voice (Rachel). Override via env.
-DEFAULT_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
-TTS_MODEL = os.getenv("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2")
-STT_MODEL = os.getenv("ELEVENLABS_STT_MODEL", "scribe_v2")
+
+def _api_key() -> str:
+    return os.getenv("ELEVENLABS_API_KEY", "").strip()
+
+
+def _voice_id() -> str:
+    return os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+
+
+def _tts_model() -> str:
+    return os.getenv("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2")
+
+
+def _stt_model() -> str:
+    return os.getenv("ELEVENLABS_STT_MODEL", "scribe_v2")
+
 
 # Ayurvedic keyterms improve STT for classical vocabulary
 AYURVEDA_KEYTERMS = [
@@ -28,15 +46,15 @@ AYURVEDA_KEYTERMS = [
 
 
 def voice_configured() -> bool:
-    return bool(ELEVEN_API_KEY)
+    return bool(_api_key())
 
 
 def voice_status() -> dict:
     return {
         "configured": voice_configured(),
-        "tts_model": TTS_MODEL,
-        "stt_model": STT_MODEL,
-        "default_voice_id": DEFAULT_VOICE_ID,
+        "tts_model": _tts_model(),
+        "stt_model": _stt_model(),
+        "default_voice_id": _voice_id(),
         "features": [
             "text_to_speech",
             "speech_to_text",
@@ -54,29 +72,29 @@ async def synthesize_speech(
     voice_id: Optional[str] = None,
     locale: str = "en",
 ) -> bytes:
-    if not ELEVEN_API_KEY:
+    key = _api_key()
+    if not key:
         raise RuntimeError("ELEVENLABS_API_KEY is not set")
     if not text or not text.strip():
         raise ValueError("Empty text")
 
-    # Keep payloads short for interactive listen buttons
     cleaned = " ".join(text.split())
     if len(cleaned) > 1200:
         cleaned = cleaned[:1200] + "…"
 
-    vid = voice_id or DEFAULT_VOICE_ID
+    vid = voice_id or _voice_id()
+    model = _tts_model()
     language_code = locale if locale in {"en", "hi", "gu"} else "en"
 
     payload = {
         "text": cleaned,
-        "model_id": TTS_MODEL,
+        "model_id": model,
     }
-    # language_code supported on flash/turbo; multilingual_v2 ignores unknown fields safely
-    if TTS_MODEL.startswith("eleven_flash") or TTS_MODEL.startswith("eleven_turbo"):
+    if model.startswith("eleven_flash") or model.startswith("eleven_turbo"):
         payload["language_code"] = language_code
 
     headers = {
-        "xi-api-key": ELEVEN_API_KEY,
+        "xi-api-key": key,
         "Accept": "audio/mpeg",
         "Content-Type": "application/json",
     }
@@ -99,15 +117,15 @@ async def transcribe_audio(
     *,
     locale: str = "en",
 ) -> dict:
-    if not ELEVEN_API_KEY:
+    key = _api_key()
+    if not key:
         raise RuntimeError("ELEVENLABS_API_KEY is not set")
     if not file_bytes:
         raise ValueError("Empty audio")
 
     language_code = locale if locale in {"en", "hi", "gu"} else None
-    headers = {"xi-api-key": ELEVEN_API_KEY}
+    headers = {"xi-api-key": key}
 
-    # Prefer webm/wav content types from browser MediaRecorder
     content_type = "audio/webm"
     lower = filename.lower()
     if lower.endswith(".wav"):
@@ -117,7 +135,7 @@ async def transcribe_audio(
     elif lower.endswith(".m4a"):
         content_type = "audio/mp4"
 
-    data: list[tuple[str, str]] = [("model_id", STT_MODEL)]
+    data: list[tuple[str, str]] = [("model_id", _stt_model())]
     if language_code:
         data.append(("language_code", language_code))
     for term in AYURVEDA_KEYTERMS:
