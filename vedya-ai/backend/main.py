@@ -285,7 +285,7 @@ async def recommend(inp: VignetteInput, user: Optional[AuthUser] = Depends(get_o
     for r in ranked[:5]:  # explain top 5 only
         yoga_data = candidate_map.get(r.yoga_id, {})
         pack = build_evidence_pack(yoga_data, r)
-        explanation = await explain_recommendation(pack, vignette_summary, _llm_client)
+        explanation = await explain_recommendation(pack, vignette_summary, _llm_client, locale=locale)
         r.explanation = explanation
         if explanation.llm_used:
             llm_used = True
@@ -512,7 +512,8 @@ async def compare_formulations(
 
     pack_a = build_evidence_pack(yoga_a_data, make_result(yoga_a_data, 0.0))
     pack_b = build_evidence_pack(yoga_b_data, make_result(yoga_b_data, 0.0))
-    return await explain_compare(pack_a, pack_b, vignette_summary, _llm_client)
+    locale = (inp.locale or "en").lower() if inp else "en"
+    return await explain_compare(pack_a, pack_b, vignette_summary, _llm_client, locale=locale)
 
 
 @app.get("/synonym-map/{concept_name}", tags=["Learn"])
