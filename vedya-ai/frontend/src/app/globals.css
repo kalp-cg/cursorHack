@@ -1711,3 +1711,32 @@ body.locale-gu .veda-preset-label {
   .veda-ask-q { max-width: 100%; }
   .veda-ask-formulations li { flex-direction: column; align-items: flex-start; }
 }
+
+/* Romanized-Gujarati transliteration chips on /ask */
+.veda-ask-translit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+.veda-ask-translit-chip {
+  background: var(--veda-kesar-soft);
+  color: var(--veda-kesar);
+  border-radius: 999px;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+/* Listen button on /ask answers */
+.veda-ask-listen {
+  border: 1px solid var(--veda-harita);
+  background: transparent;
+  color: var(--veda-harita);
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.veda-ask-listen:hover { background: var(--veda-harita-soft); }

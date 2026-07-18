@@ -32,17 +32,88 @@ STOPWORDS = {
 # but they DO belong in the FTS query as boosters.
 INTENT_BOOSTERS = {"treatment", "treat", "cure", "remedy", "medicine", "management", "therapy"}
 
+# Romanized Gujarati / colloquial health vocabulary → English retrieval terms.
+# Lets "mane tav chhe" (Gujarati typed in Latin script) resolve to Jvara.
+ROMAN_GU_LEXICON: dict[str, str] = {
+    "tav": "fever", "taav": "fever", "tavv": "fever", "bukhar": "fever", "jvar": "fever",
+    "khansi": "cough", "khasi": "cough", "udharas": "cough", "udhras": "cough", "ughras": "cough",
+    "sardi": "common cold", "shardi": "common cold", "salekham": "common cold",
+    "sojo": "swelling", "soja": "swelling", "sojo-chadvo": "swelling",
+    "dukhavo": "pain", "dukhe": "pain", "dard": "pain", "pida": "pain",
+    "pet": "stomach", "petma": "stomach", "petno": "stomach",
+    "mathu": "head", "matha": "head", "mathano": "head", "mathama": "head",
+    "ulti": "vomiting", "ubka": "nausea", "moda": "nausea",
+    "jhada": "diarrhea", "zada": "diarrhea", "atisar": "diarrhea",
+    "kabajiyat": "constipation", "kabjiyat": "constipation",
+    "chakkar": "dizziness", "kamjori": "weakness", "nabalai": "weakness", "ashakti": "weakness",
+    "bhukh": "appetite", "aruchi": "anorexia",
+    "madhumeh": "diabetes", "diabetes": "diabetes", "diabites": "diabetes",
+    "garbhavati": "pregnancy", "garbhvati": "pregnancy", "sagarbha": "pregnancy",
+    "galama": "throat", "galu": "throat", "gala": "throat",
+    "shwas": "breathlessness", "swas": "breathlessness", "haaf": "breathlessness",
+    "kharaj": "itching", "khanjavad": "itching", "khaj": "itching",
+    "anidra": "insomnia", "ungh": "sleep", "unghna": "sleep",
+    "tavcha": "skin", "chamdi": "skin",
+    "sandha": "joint", "sandhano": "joint", "ghutan": "knee",
+    # intent words → booster
+    "sarvar": "treatment", "ilaj": "treatment", "upay": "remedy", "upchar": "treatment",
+    "dava": "medicine", "dawa": "medicine", "davo": "medicine", "aushadh": "medicine",
+}
+
+# Romanized Gujarati function words — drop them so they never pollute retrieval.
+ROMAN_GU_STOPWORDS = {
+    "mane", "mne", "che", "chhe", "cche", "6e", "ane", "ne", "ma", "mara", "maru",
+    "thay", "thayo", "thai", "thaay", "hoy", "hoi", "joie", "joiye", "joi",
+    "su", "shu", "kem", "kevi", "rite", "mate", "karvu", "karvo", "karo",
+    "levu", "levi", "levo", "aave", "avey", "aavto", "gher", "ghare",
+    "koi", "kai", "etle", "pan", "to", "tame", "ame", "hu", "chu", "chho",
+}
+
 
 def _tokenize(question: str) -> list[str]:
     words = re.findall(r"[A-Za-z\u0900-\u097F\u0A80-\u0AFF]+", question)
     return [w for w in words if len(w) > 1]
 
 
+def _map_roman_gujarati(tokens: list[str]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Replace romanized Gujarati words with English retrieval terms.
+    Returns (token dicts with {text, orig}, transliterations applied)."""
+    mapped: list[dict[str, str]] = []
+    transliterations: list[dict[str, str]] = []
+    for tok in tokens:
+        low = tok.lower()
+        if low in ROMAN_GU_STOPWORDS:
+            continue
+        if low in ROMAN_GU_LEXICON:
+            english = ROMAN_GU_LEXICON[low]
+            mapped.append({"text": english, "orig": tok})
+            transliterations.append({"from": tok, "to": english})
+        else:
+            mapped.append({"text": tok, "orig": tok})
+    return mapped, transliterations
+
+
+def extract_clinical_terms(text: str, max_terms: int = 12) -> list[str]:
+    """No-LLM fallback for free-text intake: tokenize, map romanized Gujarati,
+    drop function words, and emit bigrams first so 'common cold' resolves
+    before 'cold'. The resolver decides what actually maps to a concept."""
+    tokens = _tokenize(text)
+    mapped, _ = _map_roman_gujarati(tokens)
+    content = [
+        t["text"] for t in mapped
+        if t["text"].lower() not in STOPWORDS
+    ]
+    content = list(dict.fromkeys(content))
+    bigrams = [f"{content[i]} {content[i+1]}" for i in range(len(content) - 1)]
+    return (bigrams + content)[:max_terms]
+
+
 def expand_query(db, question: str) -> dict[str, Any]:
     """Map question words to canonical concepts + synonyms via terms table."""
-    tokens = _tokenize(question)
-    content_tokens = [t for t in tokens if t.lower() not in STOPWORDS]
-    boosters = [t for t in tokens if t.lower() in INTENT_BOOSTERS]
+    raw_tokens = _tokenize(question)
+    token_dicts, transliterations = _map_roman_gujarati(raw_tokens)
+    content = [t for t in token_dicts if t["text"].lower() not in STOPWORDS]
+    boosters = [t["text"] for t in token_dicts if t["text"].lower() in INTENT_BOOSTERS]
 
     matched_concepts: list[dict[str, Any]] = []
     expansion_terms: set[str] = set()
@@ -50,9 +121,12 @@ def expand_query(db, question: str) -> dict[str, Any]:
 
     cur = db.cursor()
     # Try single tokens and adjacent bigrams (e.g. "common cold")
-    candidates = list(content_tokens)
-    for i in range(len(content_tokens) - 1):
-        candidates.append(f"{content_tokens[i]} {content_tokens[i+1]}")
+    candidates: list[dict[str, str]] = list(content)
+    for i in range(len(content) - 1):
+        candidates.append({
+            "text": f"{content[i]['text']} {content[i+1]['text']}",
+            "orig": f"{content[i]['orig']} {content[i+1]['orig']}",
+        })
 
     for cand in candidates:
         cur.execute(
@@ -62,7 +136,7 @@ def expand_query(db, question: str) -> dict[str, Any]:
             WHERE lower(t.surface_form) = lower(%s)
             LIMIT 1
             """,
-            (cand,),
+            (cand["text"],),
         )
         row = cur.fetchone()
         if not row or row[0] in seen_concepts:
@@ -75,17 +149,18 @@ def expand_query(db, question: str) -> dict[str, Any]:
         synonyms = [r[0] for r in cur.fetchall()]
         matched_concepts.append(
             {"concept_id": row[0], "canonical_name": row[1], "type": row[2],
-             "surface_form": cand, "synonyms": synonyms}
+             "surface_form": cand["orig"], "synonyms": synonyms}
         )
         expansion_terms.update(synonyms)
         expansion_terms.add(row[1])
     cur.close()
 
     return {
-        "tokens": content_tokens,
+        "tokens": [t["text"] for t in content],
         "boosters": boosters,
         "concepts": matched_concepts,
         "expansion_terms": sorted(expansion_terms),
+        "transliterations": transliterations,
     }
 
 
@@ -195,14 +270,16 @@ def compose_answer(
     expansion: dict[str, Any],
     passages: list[dict[str, Any]],
     formulations: list[dict[str, Any]],
-) -> str:
-    """Deterministic, citation-bound answer in English (translated downstream)."""
+) -> list[str]:
+    """Deterministic, citation-bound summary as separate lines.
+    Kept short and structured — full verse quotes live in the sources panel,
+    and each line is translated independently so formatting survives."""
     if not passages and not formulations:
-        return (
-            "The current corpus does not contain a passage answering this question. "
+        return [
+            "The current corpus does not contain a passage answering this question.",
             "Try classical terms (e.g. Jvara for fever, Kasa for cough), or ask about "
-            "a specific formulation or disease."
-        )
+            "a specific formulation or disease.",
+        ]
 
     lines: list[str] = []
 
@@ -211,30 +288,25 @@ def compose_answer(
             f"{c['canonical_name']}" + (f" (asked as “{c['surface_form']}”)" if c["surface_form"].lower() != c["canonical_name"].lower() else "")
             for c in expansion["concepts"][:4]
         )
-        lines.append(f"Recognised classical concepts: {names}.")
+        lines.append(f"Your question maps to the classical concepts: {names}.")
 
     if formulations:
         top = formulations[:3]
-        flist = "; ".join(
-            f"{f['name']}" + (f" ({f['kalpana']})" if f.get("kalpana") else "")
-            + f" — indicated for {', '.join(f['matched_conditions'][:3])}"
-            for f in top
-        )
-        lines.append(f"Formulations linked in the corpus: {flist}.")
+        for f in top:
+            kalpana = f" ({f['kalpana']})" if f.get("kalpana") else ""
+            lines.append(
+                f"• {f['name']}{kalpana} is indicated in the corpus for "
+                f"{', '.join(f['matched_conditions'][:3])}."
+            )
 
     if passages:
-        lines.append("What the classical texts say:")
-        for p in passages[:4]:
-            excerpt = p["excerpt"]
-            if len(excerpt) > 320:
-                excerpt = excerpt[:320].rsplit(" ", 1)[0] + "…"
-            lines.append(f"• “{excerpt}” — {_citation_label(p)}")
+        works = sorted({p["work"] for p in passages[:4]})
+        lines.append(
+            f"{len(passages)} supporting passages were retrieved from {', '.join(works)} — "
+            "see the classical sources below with exact chapter and verse."
+        )
 
-    lines.append(
-        "This answer is assembled only from indexed classical sources above — "
-        "educational reference, not a prescription."
-    )
-    return "\n".join(lines)
+    return lines
 
 
 async def llm_polish(
@@ -247,7 +319,7 @@ async def llm_polish(
     """Optional fluent narration, strictly grounded in retrieved passages."""
     if llm_client is None or not passages:
         return None
-    lang = {"en": "English", "hi": "Hindi", "gu": "Gujarati"}.get(locale, "English")
+    lang = {"en": "English", "gu": "Gujarati"}.get(locale, "English")
     context = "\n\n".join(
         f"[{i+1}] ({_citation_label(p)}) {p['excerpt'][:500]}" for i, p in enumerate(passages[:6])
     )
@@ -289,11 +361,17 @@ async def answer_question(
     formulations = retrieve_formulations(db, expansion, k=5)
 
     llm_answer = await llm_polish(llm_client, question, passages, formulations, locale)
-    answer = llm_answer or compose_answer(question, expansion, passages, formulations)
+    answer_lines = (
+        [line for line in llm_answer.split("\n") if line.strip()]
+        if llm_answer
+        else compose_answer(question, expansion, passages, formulations)
+    )
 
     return {
         "question": question,
-        "answer": answer,
+        "answer": "\n".join(answer_lines),
+        "answer_lines": answer_lines,
+        "transliterations": expansion.get("transliterations", []),
         "llm_used": llm_answer is not None,
         "concepts": [
             {"canonical_name": c["canonical_name"], "surface_form": c["surface_form"],

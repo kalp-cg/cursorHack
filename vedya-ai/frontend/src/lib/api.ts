@@ -239,8 +239,12 @@ export interface AskFormulation {
 
 export interface AskResponse {
   question: string;
+  retrieval_question?: string;
   answer: string;
+  answer_lines?: string[];
+  transliterations?: Array<{ from: string; to: string }>;
   llm_used: boolean;
+  cached?: boolean;
   concepts: AskConcept[];
   passages: AskPassage[];
   formulations: AskFormulation[];

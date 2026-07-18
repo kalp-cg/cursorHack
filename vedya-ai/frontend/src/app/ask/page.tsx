@@ -1,8 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import TopBar from "@/components/TopBar";
 import { useApp } from "@/lib/app-context";
 import { api, AskResponse } from "@/lib/api";
 
@@ -15,8 +14,8 @@ interface ChatTurn {
 const SUGGESTIONS = [
   "What is the treatment for fever with cough?",
   "Which formulations help in common cold (Pinasa)?",
-  "What do the texts say about Kapha type fever?",
-  "बुखार और सूजन के लिए कौन सा योग उपयुक्त है?",
+  "mane tav ane khansi chhe",
+  "તાવ અને ઉધરસ માટે કયો યોગ યોગ્ય છે?",
 ];
 
 function citation(p: AskResponse["passages"][number]): string {
@@ -32,7 +31,32 @@ export default function AskPage() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [voiceReady, setVoiceReady] = useState(false);
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    api.voiceStatus().then((s) => setVoiceReady(s.configured)).catch(() => setVoiceReady(false));
+  }, []);
+
+  const speak = async (idx: number, text: string) => {
+    if (speakingIdx !== null) {
+      audioRef.current?.pause();
+      setSpeakingIdx(null);
+      return;
+    }
+    try {
+      setSpeakingIdx(idx);
+      const blob = await api.voiceTts(text, locale);
+      const audio = new Audio(URL.createObjectURL(blob));
+      audioRef.current = audio;
+      audio.onended = () => setSpeakingIdx(null);
+      await audio.play();
+    } catch {
+      setSpeakingIdx(null);
+    }
+  };
 
   const submit = async (question: string) => {
     const q = question.trim();
@@ -62,7 +86,6 @@ export default function AskPage() {
 
   return (
     <div className="veda-page">
-      <TopBar />
       <main className="veda-ask">
         <header className="veda-ask-head">
           <h1>{t("askTitle")}</h1>
@@ -96,10 +119,21 @@ export default function AskPage() {
 
               {turn.response && (
                 <div className="veda-ask-a">
+                  {turn.response.transliterations && turn.response.transliterations.length > 0 && (
+                    <div className="veda-ask-translit">
+                      {turn.response.transliterations.map((tr) => (
+                        <span key={tr.from} className="veda-ask-translit-chip">
+                          {tr.from} → {tr.to}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="veda-ask-answer">
-                    {turn.response.answer.split("\n").map((line, i) => (
-                      <p key={i}>{line}</p>
-                    ))}
+                    {(turn.response.answer_lines ?? turn.response.answer.split("\n")).map(
+                      (line, i) => (
+                        <p key={i}>{line}</p>
+                      )
+                    )}
                   </div>
 
                   {turn.response.concepts.length > 0 && (
@@ -158,6 +192,20 @@ export default function AskPage() {
                   )}
 
                   <footer className="veda-ask-foot">
+                    {voiceReady && (
+                      <button
+                        type="button"
+                        className="veda-ask-listen"
+                        onClick={() =>
+                          speak(
+                            idx,
+                            (turn.response!.answer_lines ?? [turn.response!.answer]).join(" ")
+                          )
+                        }
+                      >
+                        {speakingIdx === idx ? t("askStopListen") : t("askListen")}
+                      </button>
+                    )}
                     <span className="veda-ask-grounded">{t("askGrounded")}</span>
                     <span className="veda-ask-disclaimer">{turn.response.disclaimer}</span>
                   </footer>

@@ -40,7 +40,7 @@ const AppCtx = createContext<AppState | null>(null);
 
 function applyDocumentLocale(next: Locale) {
   if (typeof document === "undefined") return;
-  document.documentElement.lang = next === "gu" ? "gu" : next === "hi" ? "hi" : "en";
+  document.documentElement.lang = next === "gu" ? "gu" : "en";
   document.documentElement.dataset.locale = next;
   document.body.classList.remove("locale-en", "locale-hi", "locale-gu");
   document.body.classList.add(`locale-${next}`);
@@ -54,11 +54,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      const loc = (localStorage.getItem(LOCALE_KEY) as Locale) || "en";
-      if (loc === "en" || loc === "hi" || loc === "gu") {
-        setLocaleState(loc);
-        applyDocumentLocale(loc);
-      }
+      const stored = localStorage.getItem(LOCALE_KEY);
+      const loc: Locale = stored === "gu" ? "gu" : "en";
+      setLocaleState(loc);
+      applyDocumentLocale(loc);
+      if (stored && stored !== loc) localStorage.setItem(LOCALE_KEY, loc);
       const tok = localStorage.getItem(TOKEN_KEY);
       const usr = localStorage.getItem(USER_KEY);
       if (tok && usr) {
@@ -83,11 +83,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUser(usr);
       localStorage.setItem(TOKEN_KEY, tok);
       localStorage.setItem(USER_KEY, JSON.stringify(usr));
-      if (
-        usr.preferred_locale === "en" ||
-        usr.preferred_locale === "hi" ||
-        usr.preferred_locale === "gu"
-      ) {
+      if (usr.preferred_locale === "en" || usr.preferred_locale === "gu") {
         setLocale(usr.preferred_locale);
       }
     },

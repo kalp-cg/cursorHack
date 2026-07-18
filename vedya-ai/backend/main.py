@@ -97,13 +97,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_extra_origins = [o.strip() for o in os.getenv("FRONTEND_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    # Dev-friendly origins; tighten for production deployments
+    # Local dev origins + deployed frontend URL(s) via FRONTEND_ORIGINS env
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:3001",
+        *_extra_origins,
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -262,7 +264,7 @@ async def run_preset(
     if not preset:
         raise HTTPException(status_code=404, detail=f"Preset '{preset_id}' not found")
     loc = (locale or "en").lower()
-    if loc not in {"en", "hi", "gu"}:
+    if loc not in {"en", "gu"}:
         loc = "en"
     vignette = preset.vignette.model_copy(update={"locale": loc})
     return await recommend(vignette, user=user)
@@ -274,7 +276,7 @@ async def recommend(inp: VignetteInput, user: Optional[AuthUser] = Depends(get_o
     trace_id = str(uuid.uuid4())
     conversation_id = inp.conversation_id
     locale = (inp.locale or "en").lower()
-    if locale not in {"en", "hi", "gu"}:
+    if locale not in {"en", "gu"}:
         locale = "en"
 
     # Conversation continuity (authenticated users)
@@ -693,6 +695,15 @@ class AskRequest(BaseModel):
     top_k: int = 8
 
 
+# Deterministic answers (no LLM) → identical questions can share one response.
+# Bounded FIFO cache: repeated demo/classroom questions cost zero DB and zero
+# translation calls, which is where the per-prompt cost actually lives.
+_ASK_CACHE: dict[tuple[str, str], dict] = {}
+_ASK_CACHE_MAX = 512
+
+_DISCLAIMER = "Educational reference from classical sources — not a diagnosis or prescription."
+
+
 @app.post("/ask", tags=["Ask"])
 async def ask(req: AskRequest, user: Optional[AuthUser] = Depends(get_optional_user)):
     """Question answering grounded in the 16k+ verse corpus.
@@ -705,10 +716,17 @@ async def ask(req: AskRequest, user: Optional[AuthUser] = Depends(get_optional_u
         raise HTTPException(status_code=400, detail="Question too long (max 500 chars)")
 
     locale = (req.locale or "en").lower()
-    if locale not in {"en", "hi", "gu"}:
+    if locale not in {"en", "gu"}:
         locale = "en"
 
-    # Corpus + synonym table are English/IAST; bridge Devanagari/Gujarati questions
+    cache_key = (" ".join(question.lower().split()), locale)
+    cached = _ASK_CACHE.get(cache_key)
+    if cached is not None and _llm_client is None:
+        return {**cached, "cached": True}
+
+    # Corpus + synonym table are English/IAST. Bridge Gujarati-script questions
+    # via translation; romanized Gujarati ("mane tav chhe") is handled inside
+    # the RAG lexicon without a network call.
     retrieval_question = question
     import re as _re
     if _re.search(r"[\u0900-\u097F\u0A80-\u0AFF]", question):
@@ -726,16 +744,21 @@ async def ask(req: AskRequest, user: Optional[AuthUser] = Depends(get_optional_u
     if retrieval_question != question:
         result["retrieval_question"] = retrieval_question
 
-    # Translate composed (non-LLM) answer for hi/gu; keep verse excerpts original
-    if locale != "en" and not result["llm_used"]:
+    # Translate the composed summary line-by-line so structure survives;
+    # verse excerpts stay in the original translation of the source text.
+    if locale != "en" and not result["llm_used"] and result.get("answer_lines"):
         try:
-            result["answer"] = (await translate_texts([result["answer"]], locale, "en"))[0]
+            translated = await translate_texts(result["answer_lines"], locale, "en")
+            result["answer_lines"] = translated
+            result["answer"] = "\n".join(translated)
         except Exception:
             pass
 
-    result["disclaimer"] = (
-        "Educational reference from classical sources — not a diagnosis or prescription."
-    )
+    result["disclaimer"] = _DISCLAIMER
+
+    if len(_ASK_CACHE) >= _ASK_CACHE_MAX:
+        _ASK_CACHE.pop(next(iter(_ASK_CACHE)))
+    _ASK_CACHE[cache_key] = result
     return result
 
 

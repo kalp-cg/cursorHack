@@ -74,11 +74,18 @@ def build_clinical_frame(inp: VignetteInput) -> ClinicalFrame:
     """Build a ClinicalFrame directly from structured input (used when LLM is off)."""
     all_terms = inp.symptoms + inp.rogas
     raw = inp.free_text or ", ".join(all_terms)
+
+    # Free-text-only intake (home page search box) with no LLM: extract
+    # candidate terms lexically — handles English and romanized Gujarati.
+    symptoms = list(inp.symptoms)
+    if not all_terms and inp.free_text:
+        from rag import extract_clinical_terms
+        symptoms = extract_clinical_terms(inp.free_text)
     comorbidities = list(inp.comorbidities)
     if inp.pregnancy and "Garbhini" not in comorbidities and "Pregnancy" not in comorbidities:
         comorbidities.append("Pregnancy")
     return ClinicalFrame(
-        symptoms=inp.symptoms,
+        symptoms=symptoms,
         rogas=inp.rogas,
         comorbidities=comorbidities,
         age_band=inp.age_band,
