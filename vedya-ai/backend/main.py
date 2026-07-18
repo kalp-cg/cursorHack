@@ -37,6 +37,11 @@ from conversations import (
     add_message, assert_conversation_owner, build_followup_context,
     create_conversation, get_messages, list_conversations,
 )
+from voice import (
+    build_listen_script, synthesize_speech, transcribe_audio, voice_configured, voice_status,
+)
+from fastapi.responses import Response
+from fastapi import File, Form, UploadFile
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://vedya:vedyapass@localhost:5432/vedyaai")
 LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
@@ -514,6 +519,83 @@ async def compare_formulations(
     pack_b = build_evidence_pack(yoga_b_data, make_result(yoga_b_data, 0.0))
     locale = (inp.locale or "en").lower() if inp else "en"
     return await explain_compare(pack_a, pack_b, vignette_summary, _llm_client, locale=locale)
+
+
+@app.get("/voice/status", tags=["Voice"])
+async def get_voice_status():
+    return voice_status()
+
+
+@app.post("/voice/tts", tags=["Voice"])
+async def voice_tts(
+    text: str = Form(...),
+    locale: str = Form("en"),
+    voice_id: Optional[str] = Form(None),
+):
+    """Speak arbitrary clinical text (explanation, compare reason, case read-aloud)."""
+    if not voice_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Voice is not configured. Set ELEVENLABS_API_KEY in the server environment.",
+        )
+    try:
+        audio = await synthesize_speech(text, voice_id=voice_id, locale=locale)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+@app.post("/voice/listen-recommendation", tags=["Voice"])
+async def voice_listen_recommendation(
+    yoga_name: str = Form(...),
+    summary: str = Form(""),
+    kalpana: str = Form(""),
+    winner_reason: str = Form(""),
+    locale: str = Form("en"),
+):
+    """Build a localized listen script for top pick / A-vs-B and return MP3."""
+    if not voice_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Voice is not configured. Set ELEVENLABS_API_KEY in the server environment.",
+        )
+    script = build_listen_script(
+        yoga_name=yoga_name,
+        kalpana=kalpana or None,
+        summary=summary,
+        winner_reason=winner_reason or None,
+        locale=locale,
+    )
+    try:
+        audio = await synthesize_speech(script, locale=locale)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return Response(
+        content=audio,
+        media_type="audio/mpeg",
+        headers={"X-Vedya-Script": script[:200].encode("ascii", "ignore").decode()},
+    )
+
+
+@app.post("/voice/stt", tags=["Voice"])
+async def voice_stt(
+    file: UploadFile = File(...),
+    locale: str = Form("en"),
+):
+    """Transcribe a spoken vignette (browser mic recording) into text for /recommend."""
+    if not voice_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Voice is not configured. Set ELEVENLABS_API_KEY in the server environment.",
+        )
+    raw = await file.read()
+    try:
+        result = await transcribe_audio(raw, filename=file.filename or "audio.webm", locale=locale)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    if not result.get("text"):
+        raise HTTPException(status_code=422, detail="Could not transcribe audio. Please try again.")
+    return result
 
 
 @app.get("/synonym-map/{concept_name}", tags=["Learn"])

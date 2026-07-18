@@ -256,4 +256,64 @@ export const api = {
       conversation: { conversation_id: string; title: string };
       messages: Array<{ role: string; content_text: string; payload?: RecommendationResponse }>;
     }>(`/conversations/${id}`),
+
+  voiceStatus: () =>
+    apiFetch<{
+      configured: boolean;
+      tts_model: string;
+      stt_model: string;
+      default_voice_id: string;
+      features: string[];
+    }>("/voice/status"),
+
+  voiceTts: async (text: string, locale = "en") => {
+    const form = new FormData();
+    form.append("text", text);
+    form.append("locale", locale);
+    const token = typeof window !== "undefined" ? localStorage.getItem("vedya_token") : null;
+    const res = await fetch(`${API_BASE}/voice/tts`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) throw new Error(`TTS ${res.status}: ${await res.text()}`);
+    return res.blob();
+  },
+
+  voiceListenRecommendation: async (opts: {
+    yogaName: string;
+    summary?: string;
+    kalpana?: string;
+    winnerReason?: string;
+    locale?: string;
+  }) => {
+    const form = new FormData();
+    form.append("yoga_name", opts.yogaName);
+    form.append("summary", opts.summary || "");
+    form.append("kalpana", opts.kalpana || "");
+    form.append("winner_reason", opts.winnerReason || "");
+    form.append("locale", opts.locale || "en");
+    const token = typeof window !== "undefined" ? localStorage.getItem("vedya_token") : null;
+    const res = await fetch(`${API_BASE}/voice/listen-recommendation`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) throw new Error(`Listen ${res.status}: ${await res.text()}`);
+    return res.blob();
+  },
+
+  voiceStt: async (blob: Blob, locale = "en") => {
+    const form = new FormData();
+    form.append("file", blob, "vignette.webm");
+    form.append("locale", locale);
+    const token = typeof window !== "undefined" ? localStorage.getItem("vedya_token") : null;
+    const res = await fetch(`${API_BASE}/voice/stt`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) throw new Error(`STT ${res.status}: ${await res.text()}`);
+    return res.json() as Promise<{ text: string; language_code?: string }>;
+  },
 };

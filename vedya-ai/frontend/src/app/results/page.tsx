@@ -15,6 +15,8 @@ import CaseChip from "@/components/CaseChip";
 import TermChip from "@/components/TermChip";
 import PrimaryButton from "@/components/PrimaryButton";
 import CitationCard from "@/components/CitationCard";
+import ListenButton from "@/components/ListenButton";
+import VoiceMic from "@/components/VoiceMic";
 import { useApp } from "@/lib/app-context";
 import Link from "next/link";
 
@@ -66,7 +68,7 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
         onChange={(e) => setFreeText(e.target.value)}
         placeholder={t("vignettePlaceholder")}
         rows={3}
-        className="w-full rounded-xl px-4 py-3 text-sm mb-6 resize-none outline-none"
+        className="w-full rounded-xl px-4 py-3 text-sm mb-3 resize-none outline-none"
         style={{
           background: "var(--veda-shila-deep)",
           border: "1px solid var(--veda-fog)",
@@ -74,6 +76,9 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
           fontFamily: "var(--font-ui)",
         }}
       />
+      <div className="mb-6">
+        <VoiceMic onTranscript={(text) => setFreeText((prev) => (prev ? `${prev} ${text}` : text))} />
+      </div>
 
       <label className="block text-sm font-medium mb-1" style={{ color: "var(--veda-ink)" }}>
         {t("symptomsLabel")}
@@ -305,6 +310,13 @@ function ResultsContent() {
                 {topResult.explanation.summary}
               </p>
             )}
+            <div className="mb-4">
+              <ListenButton
+                yogaName={topResult.yoga_name}
+                kalpana={topResult.kalpana || ""}
+                summary={topResult.explanation?.summary || ""}
+              />
+            </div>
             {topResult.references.slice(0, 1).map((r) => (
               <CitationCard key={r.ref_id} reference={r} />
             ))}
@@ -319,20 +331,33 @@ function ResultsContent() {
         {/* 3. Compare teaser */}
         {activeResults.length >= 2 && (
           <div
-            className="rounded-xl p-4 mb-6 flex items-center justify-between"
+            className="rounded-xl p-4 mb-6 flex flex-wrap items-center justify-between gap-3"
             style={{ background: "var(--veda-harita-soft)", border: "1px solid var(--veda-harita)" }}
           >
             <span className="text-sm font-medium" style={{ color: "var(--veda-harita)" }}>
               {t("whyOver", { a: activeResults[0]?.yoga_name || "", b: activeResults[1]?.yoga_name || "" })}
             </span>
-            <PrimaryButton
-              size="sm"
-              onClick={() =>
-                router.push(`/compare?a=${activeResults[0].yoga_id}&b=${activeResults[1].yoga_id}`)
-              }
-            >
-              {t("compare")} →
-            </PrimaryButton>
+            <div className="flex flex-wrap items-center gap-2">
+              <ListenButton
+                yogaName={activeResults[0].yoga_name}
+                summary={
+                  activeResults[0].explanation?.summary ||
+                  `${activeResults[0].yoga_name} vs ${activeResults[1].yoga_name}`
+                }
+                winnerReason={t("whyOver", {
+                  a: activeResults[0].yoga_name,
+                  b: activeResults[1].yoga_name,
+                })}
+              />
+              <PrimaryButton
+                size="sm"
+                onClick={() =>
+                  router.push(`/compare?a=${activeResults[0].yoga_id}&b=${activeResults[1].yoga_id}`)
+                }
+              >
+                {t("compare")} →
+              </PrimaryButton>
+            </div>
           </div>
         )}
 

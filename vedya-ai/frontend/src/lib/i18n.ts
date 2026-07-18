@@ -68,6 +68,19 @@ const en: Dict = {
   constraintsActive: "Constraints active",
   disclaimer:
     "Educational decision support only — not a diagnosis or prescription. Clinical judgment of a qualified vaidya is required.",
+  listen: "Listen",
+  voiceStop: "Stop",
+  voiceLoading: "Speaking…",
+  voiceOff: "Voice off",
+  voiceUnavailable: "Add ELEVENLABS_API_KEY on the server to enable spoken explanations.",
+  voiceError: "Voice request failed. Check the API key and try again.",
+  voiceEmpty: "No speech detected. Please try again.",
+  speakVignette: "Speak case",
+  stopRecording: "Stop mic",
+  transcribing: "Transcribing…",
+  micDenied: "Microphone access denied.",
+  speakWhy: "Speak why A over B",
+  readCase: "Read case aloud",
 };
 
 const hi: Dict = {
@@ -130,6 +143,19 @@ const hi: Dict = {
   constraintsActive: "प्रतिबंध सक्रिय",
   disclaimer:
     "केवल शैक्षिक निर्णय सहायता — निदान या नुस्खा नहीं। योग्य वैद्य का नैदानिक निर्णय आवश्यक है।",
+  listen: "सुनें",
+  voiceStop: "रोकें",
+  voiceLoading: "बोल रहा है…",
+  voiceOff: "आवाज़ बंद",
+  voiceUnavailable: "बोली गई व्याख्या के लिए सर्वर पर ELEVENLABS_API_KEY जोड़ें।",
+  voiceError: "आवाज़ अनुरोध असफल। API कुंजी जाँचें।",
+  voiceEmpty: "कोई वाणी नहीं मिली। फिर कोशिश करें।",
+  speakVignette: "केस बोलें",
+  stopRecording: "माइक बंद",
+  transcribing: "लिख रहा है…",
+  micDenied: "माइक्रोफ़ोन अनुमति नहीं मिली।",
+  speakWhy: "क्यों A, B से बेहतर — सुनें",
+  readCase: "केस ज़ोर से पढ़ें",
 };
 
 const gu: Dict = {
@@ -192,6 +218,19 @@ const gu: Dict = {
   constraintsActive: "પ્રતિબંધ સક્રિય",
   disclaimer:
     "ફક્ત શૈક્ષણિક નિર્ણય સહાય — નિદાન કે પ્રિસ્ક્રિપ્શન નથી. લાયક વૈદ્યનો નૈદાનિક નિર્ણય જરૂરી છે.",
+  listen: "સાંભળો",
+  voiceStop: "બંધ",
+  voiceLoading: "બોલી રહ્યું છે…",
+  voiceOff: "અવાજ બંધ",
+  voiceUnavailable: "બોલી સમજૂતી માટે સર્વર પર ELEVENLABS_API_KEY ઉમેરો.",
+  voiceError: "અવાજ વિનંતી નિષ્ફળ. API કી તપાસો.",
+  voiceEmpty: "કોઈ વાણી મળી નહીં. ફરી પ્રયાસ કરો.",
+  speakVignette: "કેસ બોલો",
+  stopRecording: "માઇક બંધ",
+  transcribing: "લખાઈ રહ્યું છે…",
+  micDenied: "માઇક્રોફોન પરવાનગી નથી.",
+  speakWhy: "શા માટે A, B કરતાં — સાંભળો",
+  readCase: "કેસ મોટેથી વાંચો",
 };
 
 const TABLES: Record<Locale, Dict> = { en, hi, gu };
