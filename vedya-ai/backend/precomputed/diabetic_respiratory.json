@@ -1,0 +1,95 @@
+{
+  "trace_id": "demo-diabetic-preset-001",
+  "vignette_summary": "Fever, Cough — Diabetes (Prameha)",
+  "resolved_concepts": [
+    {"surface_form": "Fever", "canonical_name": "Jvara", "concept_id": "auto", "concept_type": "roga", "synonyms_used": ["Santapa"]},
+    {"surface_form": "Cough", "canonical_name": "Kasa", "concept_id": "auto", "concept_type": "lakshana", "synonyms_used": []},
+    {"surface_form": "Diabetes", "canonical_name": "Prameha", "concept_id": "auto", "concept_type": "roga", "synonyms_used": ["Madhumeha"]}
+  ],
+  "sense_disambiguations": [],
+  "unresolved_terms": [],
+  "safety_alerts": [
+    {
+      "rule_id": "CR-01",
+      "severity": "WARN",
+      "message": "Fermented preparations (Asava/Arishta) contain naturally occurring alcohol from fermentation. These are generally unsuitable in Prameha (Diabetes) as alcohol can cause blood sugar fluctuations. Classical texts advise caution. Use with expert supervision only.",
+      "classical_basis": "Charaka Samhita, Chikitsasthana — Asava/Arishta contraindicated in Prameha context"
+    },
+    {
+      "rule_id": "CR-02",
+      "severity": "WARN",
+      "message": "This formulation contains a sweetener ingredient (Guda/Sharkara/Mishri). Sweeteners are generally contraindicated in Prameha/Diabetes due to their Madhura (sweet) taste which may aggravate the condition.",
+      "classical_basis": "Madhura rasa contraindicated in Prameha — Charaka Samhita, Nidanasthana 4"
+    }
+  ],
+  "results": [
+    {
+      "rank": 1,
+      "yoga_id": "vyaghryadi-001",
+      "yoga_name": "Vyaghryadi Kashayam",
+      "kalpana": "Kwatha/Kashayam",
+      "category": "Respiratory System",
+      "score": 6.0,
+      "rank_features": {
+        "primary_indication_match": 6.0,
+        "secondary_indication_match": 0.0,
+        "property_fit": 0.0,
+        "citation_bonus": 0.5,
+        "contraindication_penalty": 0.0,
+        "medium_penalty": 0.0,
+        "total_score": 6.0
+      },
+      "safety_violations": [],
+      "hard_excluded": false,
+      "primary_indications": ["Jvara", "Kasa"],
+      "secondary_indications": [],
+      "references": [{"ref_id": "ref-sharngadhara-001", "work": "Sharngadhara Samhita, Madhyama Khanda 2", "sthana": null, "chapter": null, "verse_id": null, "excerpt_text": "Aqueous decoction — suitable in Prameha context as it contains no fermented ingredients or sweeteners."}],
+      "explanation": {"summary": "Vyaghryadi Kashayam is an aqueous decoction (Kwatha) — safe for use in Prameha as it contains no fermented alcohol or sweeteners. Its Kantakari, Shunthi, Pippali ingredients are Ushna-Katu in nature and suitable for respiratory presentations.", "claims": [], "llm_used": false, "template_fallback": false},
+      "differentiation_note": null,
+      "dosage": "15-30 ml liquid extract",
+      "anupana": "Warm water before food",
+      "coverage_note": null
+    },
+    {
+      "rank": 2,
+      "yoga_id": "amritarishta-001",
+      "yoga_name": "Amritarishta",
+      "kalpana": "Asava/Arishta",
+      "category": "Fever (Jwara)",
+      "score": 1.0,
+      "rank_features": {
+        "primary_indication_match": 6.0,
+        "secondary_indication_match": 0.0,
+        "property_fit": 0.0,
+        "citation_bonus": 0.5,
+        "contraindication_penalty": 5.0,
+        "medium_penalty": 2.0,
+        "total_score": 1.0
+      },
+      "safety_violations": [
+        {
+          "rule_id": "CR-01",
+          "severity": "WARN",
+          "message": "Fermented preparations (Asava/Arishta) contain naturally occurring alcohol from fermentation. Generally unsuitable in Prameha (Diabetes). Use with expert supervision only.",
+          "classical_basis": "Charaka Samhita, Chikitsasthana — Asava/Arishta contraindicated in Prameha context"
+        }
+      ],
+      "hard_excluded": false,
+      "primary_indications": ["Jvara"],
+      "secondary_indications": [],
+      "references": [{"ref_id": "ref-amritarishta-001", "work": "Bhaishajya Ratnavali", "sthana": null, "chapter": null, "verse_id": null, "excerpt_text": "Amritarishta — fermented preparation indicated in all types of fever."}],
+      "explanation": {"summary": "Amritarishta is indicated for Jvara but carries a WARN safety flag for Prameha (Diabetes) due to its fermented nature (Asava/Arishta class). Use only under expert supervision.", "claims": [], "llm_used": false, "template_fallback": true},
+      "differentiation_note": null,
+      "dosage": "15-30 ml with equal water",
+      "anupana": "Equal water after food",
+      "coverage_note": null
+    }
+  ],
+  "total_candidates": 18,
+  "excluded_count": 0,
+  "warned_count": 7,
+  "corpus_version": "1.0.0",
+  "llm_used": false,
+  "coverage_note": null,
+  "disclaimer": "Educational decision support only. Not a diagnosis or prescription. Clinical judgment of a qualified vaidya is required."
+}
