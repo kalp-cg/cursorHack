@@ -1,0 +1,424 @@
+# VedyaAI — Disease / Symptom Synonym Table
+# Each entry maps a canonical Ayurvedic concept to its synonyms (Sanskrit, IAST, English, common terms).
+# Used by the Entity Resolver to expand user-entered terms to canonical concept IDs.
+# Rule: all surface forms here must resolve to exactly one canonical name.
+
+- canonical: Jvara
+  type: roga
+  synonyms:
+    - Santapa
+    - Jwara
+    - Fever
+    - Pyrexia
+    - Tapa
+    - Dehodvega
+    - Chronic fever
+    - All types of fevers
+    - Intermittent fever
+    - Vishama Jvara
+    - Nityajvara
+
+- canonical: Kasa
+  type: lakshana
+  synonyms:
+    - Cough
+    - Dry cough
+    - Productive cough
+    - Kapha cough
+    - Kasaroga
+    - Vataja Kasa
+    - Pittaja Kasa
+    - Kaphaja Kasa
+
+- canonical: Pinasa
+  type: roga
+  synonyms:
+    - Pratishyaya
+    - Pratiśyāya
+    - Common Cold
+    - URTI
+    - Upper respiratory tract infection
+    - Cold
+    - Runny nose
+    - Nasal discharge
+    - Rhinitis
+    - Nasaroga
+    - Dusta Pratishyaya
+
+- canonical: Shwasa
+  type: roga
+  synonyms:
+    - Swasa
+    - Breathlessness
+    - Dyspnea
+    - Asthma
+    - Bronchial asthma
+    - Tamaka Shwasa
+    - Shvasaroga
+    - Hikka-Shwasa
+
+- canonical: Hikka
+  type: lakshana
+  synonyms:
+    - Hiccup
+    - Hiccough
+    - Hicca
+    - Hikkaroga
+
+- canonical: Shotha
+  type: lakshana
+  synonyms:
+    - Shopha
+    - Edema
+    - Oedema
+    - Swelling
+    - Inflammation
+    - Inflammatory
+    - Sotha
+    - Generalized swelling
+    - Anasarca
+    - Shvayathu
+
+- canonical: Prameha
+  type: roga
+  synonyms:
+    - Madhumeha
+    - Diabetes
+    - Diabetes mellitus
+    - Diabetic
+    - Urinary disorders
+    - Glycosuria
+    - Mehana
+    - Prameharoga
+    - Type 2 diabetes
+    - Insulin resistance
+
+- canonical: Agnimandya
+  type: roga
+  synonyms:
+    - Indigestion
+    - Dyspepsia
+    - Loss of appetite
+    - Aruchi
+    - Digestive weakness
+    - Mandagni
+    - Poor digestion
+    - Anorexia
+    - Ajeerna
+
+- canonical: Grahani
+  type: roga
+  synonyms:
+    - Malabsorption
+    - Malabsorption syndrome
+    - Irritable bowel syndrome
+    - IBS
+    - Grahani Dosha
+    - Chronic diarrhea
+
+- canonical: Vibandha
+  type: lakshana
+  synonyms:
+    - Constipation
+    - Costiveness
+    - Malabadhata
+    - Hard stools
+    - Straining at stool
+
+- canonical: Atisara
+  type: roga
+  synonyms:
+    - Diarrhea
+    - Diarrhoea
+    - Loose stools
+    - Atisar
+    - Loose motions
+
+- canonical: Pravahika
+  type: roga
+  synonyms:
+    - Dysentery
+    - Bloody diarrhea
+    - Mucous stools
+    - Amoebic dysentery
+
+- canonical: Arsha
+  type: roga
+  synonyms:
+    - Piles
+    - Hemorrhoids
+    - Haemorrhoids
+    - Arshasa
+    - Rectal bleeding
+
+- canonical: Kamala
+  type: roga
+  synonyms:
+    - Jaundice
+    - Icterus
+    - Hepatic jaundice
+    - Koshthashrita Kamala
+
+- canonical: Yakrit Vikara
+  type: roga
+  synonyms:
+    - Liver disorder
+    - Liver disease
+    - Hepatitis
+    - Hepatomegaly
+    - Liver enlargement
+    - Yakrit Roga
+    - Plihayakrid Roga
+
+- canonical: Kushtha
+  type: roga
+  synonyms:
+    - Skin disease
+    - Skin disorder
+    - Eczema
+    - Psoriasis
+    - Dermatitis
+    - Leprosy
+    - Twak Roga
+    - Vitiligo
+    - Shvitra
+
+- canonical: Vrana
+  type: roga
+  synonyms:
+    - Wound
+    - Ulcer
+    - Non-healing wound
+    - Burn wound
+    - Diabetic wound
+    - Diabetic ulcer
+    - Dushta Vrana
+    - Chronic ulcer
+    - Sores
+
+- canonical: Pandu
+  type: roga
+  synonyms:
+    - Anemia
+    - Anaemia
+    - Iron deficiency anemia
+    - Panduroga
+    - Pallor
+    - Blood deficiency
+
+- canonical: Hrid Roga
+  type: roga
+  synonyms:
+    - Heart disease
+    - Cardiac disorder
+    - Palpitation
+    - Hridya
+    - Hridayaroga
+    - Cardiomyopathy
+    - Angina
+
+- canonical: Amavata
+  type: roga
+  synonyms:
+    - Rheumatoid arthritis
+    - Arthritis
+    - Ama Vata
+    - Joint pain
+    - Joint inflammation
+    - Polyarthritis
+
+- canonical: Vatarakta
+  type: roga
+  synonyms:
+    - Gout
+    - Vata Rakta
+    - Hyperuricemia
+    - Gouty arthritis
+
+- canonical: Vata Vyadhi
+  type: roga
+  synonyms:
+    - Neurological disorder
+    - Paralysis
+    - Pakshavadha
+    - Epilepsy
+    - Apasmara
+    - Tremor
+    - Kampavata
+    - Vata disease
+    - Neurodegenerative
+
+- canonical: Katigraha
+  type: roga
+  synonyms:
+    - Back pain
+    - Low back pain
+    - Lumbar pain
+    - Sciatica
+    - Gridhrasi
+
+- canonical: Medhya
+  type: karma
+  synonyms:
+    - Memory
+    - Brain tonic
+    - Cognition
+    - Concentration
+    - Memory enhancer
+    - Intellect
+    - Medha
+    - Brain health
+
+- canonical: Artava Vikara
+  type: roga
+  synonyms:
+    - Menstrual disorder
+    - Menorrhagia
+    - Dysmenorrhea
+    - Dysmenorrhoea
+    - Leucorrhea
+    - Amenorrhea
+    - Asrigdara
+    - Pradara
+    - Irregular menstruation
+    - Yoni Roga
+
+- canonical: Vajikarana
+  type: karma
+  synonyms:
+    - Aphrodisiac
+    - Libido
+    - Sexual debility
+    - Male infertility
+    - Erectile dysfunction
+    - Shukra Kshaya
+
+- canonical: Sutika
+  type: roga
+  synonyms:
+    - Post-natal
+    - Postnatal
+    - Post natal
+    - Postpartum
+    - Sutika Roga
+    - Post-delivery
+    - Post-partum
+
+- canonical: Mutra Vikara
+  type: roga
+  synonyms:
+    - Urinary disorder
+    - Dysuria
+    - Diuretic indication
+    - Kidney disorder
+    - Mutrakrichra
+    - Mutraghata
+    - Urinary tract
+    - Nephritis
+    - Renal disorder
+
+- canonical: Jalodara
+  type: roga
+  synonyms:
+    - Ascites
+    - Abdominal fluid
+    - Udara Roga
+    - Tympanites
+
+- canonical: Pliha Roga
+  type: roga
+  synonyms:
+    - Spleen disorder
+    - Splenomegaly
+    - Splenic enlargement
+    - Plihayakrid
+    - Spleen enlargement
+
+- canonical: Daurbalya
+  type: lakshana
+  synonyms:
+    - Debility
+    - Weakness
+    - Fatigue
+    - Emaciation
+    - General weakness
+    - Kshaya
+    - Klama
+
+- canonical: Rasayana
+  type: karma
+  synonyms:
+    - Rejuvenative
+    - General tonic
+    - Tonic
+    - Health promoter
+    - Immunomodulator
+    - Immunity booster
+    - Adaptogen
+    - Anti-aging
+    - Longevity
+
+- canonical: Krimi
+  type: roga
+  synonyms:
+    - Intestinal worms
+    - Parasites
+    - Krimi Roga
+    - Worm infestation
+    - Helminthiasis
+    - Anthelmintic
+
+- canonical: Sthoulya
+  type: roga
+  synonyms:
+    - Obesity
+    - Overweight
+    - Weight loss
+    - Medoroga
+    - Meda Vriddhi
+    - Hyperlipidemia
+
+- canonical: Shoola
+  type: lakshana
+  synonyms:
+    - Pain
+    - Abdominal pain
+    - Colic
+    - Shoola
+    - Stomach pain
+    - Cramping
+
+- canonical: Chardi
+  type: lakshana
+  synonyms:
+    - Vomiting
+    - Nausea
+    - Emesis
+    - Nausea and vomiting
+    - Antiemetic
+
+- canonical: Kushtha_external
+  type: karma
+  synonyms:
+    - Wound healing
+    - External application
+    - Topical
+    - Anti-infective
+    - Healing
+
+- canonical: Raktapitta
+  type: roga
+  synonyms:
+    - Bleeding disorders
+    - Hemorrhage
+    - Hemoptysis
+    - Rakta Pitta
+
+- canonical: Mutrashmari
+  type: roga
+  synonyms:
+    - Kidney stones
+    - Urinary stones
+    - Calculi
+    - Renal calculi
+    - Ashmarigrant
