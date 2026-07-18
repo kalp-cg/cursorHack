@@ -1,0 +1,109 @@
+{
+  "trace_id": "demo-pinasa-preset-001",
+  "vignette_summary": "Fever, Cough, Common Cold, Pinasa (URTI)",
+  "resolved_concepts": [
+    {"surface_form": "Fever", "canonical_name": "Jvara", "concept_id": "auto", "concept_type": "roga", "synonyms_used": ["Santapa", "Jwara"]},
+    {"surface_form": "Cough", "canonical_name": "Kasa", "concept_id": "auto", "concept_type": "lakshana", "synonyms_used": ["Dry cough"]},
+    {"surface_form": "Pinasa", "canonical_name": "Pinasa", "concept_id": "auto", "concept_type": "roga", "synonyms_used": ["Pratishyaya", "Common Cold", "URTI"]}
+  ],
+  "sense_disambiguations": [],
+  "unresolved_terms": [],
+  "safety_alerts": [],
+  "results": [
+    {
+      "rank": 1,
+      "yoga_id": "vyaghryadi-001",
+      "yoga_name": "Vyaghryadi Kashayam",
+      "kalpana": "Kwatha/Kashayam",
+      "category": "Respiratory System",
+      "score": 9.5,
+      "rank_features": {
+        "primary_indication_match": 9.0,
+        "secondary_indication_match": 3.0,
+        "property_fit": 0.0,
+        "citation_bonus": 0.5,
+        "contraindication_penalty": 0.0,
+        "medium_penalty": 0.0,
+        "total_score": 9.5
+      },
+      "safety_violations": [],
+      "hard_excluded": false,
+      "primary_indications": ["Jvara", "Kasa", "Pinasa", "Shwasa"],
+      "secondary_indications": ["Santapa", "Pratishyaya", "URTI"],
+      "references": [
+        {
+          "ref_id": "ref-sharngadhara-001",
+          "work": "Sharngadhara Samhita, Madhyama Khanda 2",
+          "sthana": null,
+          "chapter": null,
+          "verse_id": null,
+          "excerpt_text": "Advised in Jvara (fever) and Kasa (cough), particularly suitable for Pinasa (common cold/URTI) presentations."
+        }
+      ],
+      "explanation": {
+        "summary": "Vyaghryadi Kashayam is a decoction of Vyaghri (Kantakari), Shunthi, and Pippali — herbs with Ushna (hot) and Katu (pungent) properties that specifically address Pinasa (common cold) with its associated Kapha vitiation and nasal symptoms. It directly matches Pinasa as a primary indication, unlike Punarnavadi which addresses systemic inflammatory edema (Shotha).",
+        "claims": [
+          {"text": "Vyaghryadi has Pinasa/Pratishyaya as a primary indication, directly matching URTI presentation.", "ref_ids": ["ref-sharngadhara-001"]},
+          {"text": "Kantakari (Vyaghri) and Shunthi possess Ushna Virya that resolves Kapha accumulation in the upper respiratory tract.", "ref_ids": ["ref-sharngadhara-001"]},
+          {"text": "Punarnavadi Kashayam, while also indicated in Jvara and Kasa, primarily targets Shotha (inflammatory edema) — not present in this case.", "ref_ids": []}
+        ],
+        "llm_used": false,
+        "template_fallback": false
+      },
+      "differentiation_note": "Vyaghryadi is hot and dry, making it better suited than Punarnavadi for patients with common cold (Pinasa) and runny nose, whereas Punarnavadi is appropriate for generalized inflammatory swelling (Shotha).",
+      "dosage": "15-30 ml liquid extract",
+      "anupana": "Warm water before food",
+      "coverage_note": null
+    },
+    {
+      "rank": 2,
+      "yoga_id": "punarnavadi-001",
+      "yoga_name": "Punarnavadi Kashayam",
+      "kalpana": "Kwatha/Kashayam",
+      "category": "Urinary System",
+      "score": 6.0,
+      "rank_features": {
+        "primary_indication_match": 6.0,
+        "secondary_indication_match": 0.0,
+        "property_fit": 0.0,
+        "citation_bonus": 0.5,
+        "contraindication_penalty": 0.0,
+        "medium_penalty": 0.0,
+        "total_score": 6.0
+      },
+      "safety_violations": [],
+      "hard_excluded": false,
+      "primary_indications": ["Mutra Vikara", "Shotha", "Jvara", "Kasa", "Pandu", "Jalodara"],
+      "secondary_indications": ["Santapa", "Fever", "Cough"],
+      "references": [
+        {
+          "ref_id": "ref-ashtanga-001",
+          "work": "Ashtanga Hrudayam, Shotha Chikitsa",
+          "sthana": null,
+          "chapter": null,
+          "verse_id": null,
+          "excerpt_text": "Diuretic and anti-inflammatory. Advised in Fever (Jvara), Cough (Kasa), generalized inflammatory changes/swelling (Shotha)."
+        }
+      ],
+      "explanation": {
+        "summary": "Punarnavadi Kashayam is indicated in Jvara and Kasa, but its primary specialization is Shotha (edema/inflammation) — not present in this Pinasa (common cold/URTI) case. Without systemic inflammatory component, Punarnavadi is a lower-ranked choice here.",
+        "claims": [
+          {"text": "Punarnavadi's primary indications are Shotha (edema) and Mutra Vikara (urinary disorders), not specifically Pinasa.", "ref_ids": ["ref-ashtanga-001"]}
+        ],
+        "llm_used": false,
+        "template_fallback": false
+      },
+      "differentiation_note": "Best suited when generalized inflammatory swelling (Shotha) is the dominant feature.",
+      "dosage": "15-30 ml",
+      "anupana": "With water before food",
+      "coverage_note": null
+    }
+  ],
+  "total_candidates": 18,
+  "excluded_count": 0,
+  "warned_count": 0,
+  "corpus_version": "1.0.0",
+  "llm_used": false,
+  "coverage_note": null,
+  "disclaimer": "Educational decision support only. Not a diagnosis or prescription. Clinical judgment of a qualified vaidya is required."
+}
