@@ -105,11 +105,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else sessionStorage.removeItem(CONV_KEY);
   }, []);
 
+  // Stable across auth/conversation updates — putting `t` in effect deps used to
+  // re-fire recommend/presets whenever conversationId changed (infinite loop).
+  const t = useCallback(
+    (key: string, vars?: Record<string, string>) => translate(locale, key, vars),
+    [locale]
+  );
+
   const value = useMemo<AppState>(
     () => ({
       locale,
       setLocale,
-      t: (key: string, vars?: Record<string, string>) => translate(locale, key, vars),
+      t,
       token,
       user,
       setSession,
@@ -117,7 +124,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       conversationId,
       setConversationId,
     }),
-    [locale, setLocale, token, user, setSession, logout, conversationId, setConversationId]
+    [locale, setLocale, t, token, user, setSession, logout, conversationId, setConversationId]
   );
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

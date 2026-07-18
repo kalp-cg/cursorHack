@@ -36,8 +36,11 @@ function SignupForm() {
       });
       setSession(res.access_token, res.user);
       router.push(returnTo);
-    } catch {
-      setError(t("signupError"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      // Surface API detail when present (e.g. weak password, email taken).
+      const detailMatch = msg.match(/"detail"\s*:\s*"([^"]+)"/);
+      setError(detailMatch?.[1] || t("signupError"));
     } finally {
       setLoading(false);
     }

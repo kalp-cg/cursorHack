@@ -241,14 +241,16 @@ function ResultsContent() {
     }
   }, [searchParams]);
 
+  const intakeMode = searchParams.get("intake") === "true";
+  const caseParam = searchParams.get("case");
+
   useEffect(() => {
-    if (searchParams.get("intake") === "true") {
+    if (intakeMode) {
       setShowIntake(true);
       setLoading(false);
       return;
     }
 
-    const caseParam = searchParams.get("case");
     if (caseParam) {
       const decoded = decodeCaseParam(caseParam);
       if (decoded) {
@@ -256,16 +258,24 @@ function ResultsContent() {
         setError("");
         const payload = { ...decoded, locale: decoded.locale || locale };
         sessionStorage.setItem("vedya_input", JSON.stringify(payload));
+        let cancelled = false;
         api
           .recommend(payload)
           .then((result) => {
+            if (cancelled) return;
             if (result.conversation_id) setConversationId(result.conversation_id);
             sessionStorage.setItem("vedya_results", JSON.stringify(result));
             setResponse(result);
           })
-          .catch((e) => setError(e instanceof Error ? e.message : t("rankError")))
-          .finally(() => setLoading(false));
-        return;
+          .catch((e) => {
+            if (!cancelled) setError(e instanceof Error ? e.message : "Rank failed");
+          })
+          .finally(() => {
+            if (!cancelled) setLoading(false);
+          });
+        return () => {
+          cancelled = true;
+        };
       }
     }
 
@@ -274,16 +284,17 @@ function ResultsContent() {
       const parsed = JSON.parse(stored) as RecommendationResponse;
       setResponse(parsed);
       if (parsed.conversation_id) setConversationId(parsed.conversation_id);
-      // Auto-select top-2 for compare hint when arriving with results
       const active = parsed.results.filter((r) => !r.hard_excluded);
       if (active.length >= 2) {
         setSelectedForCompare([active[0].yoga_id, active[1].yoga_id]);
       }
     }
     setLoading(false);
-  }, [searchParams, setConversationId, locale, t]);
+    // Intentionally omit `t` / unstable searchParams object — only re-run on URL inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intakeMode, caseParam, setConversationId]);
 
-  // Re-rank with new locale so explanations switch EN ↔ GU
+  // Re-rank only when the user switches EN ↔ GU (not on auth/conversation updates)
   useEffect(() => {
     if (localeBoot.current) {
       localeBoot.current = false;
@@ -306,7 +317,7 @@ function ResultsContent() {
         sessionStorage.setItem("vedya_results", JSON.stringify(result));
         setResponse(result);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : t("rankError"));
+        if (!cancelled) setError(e instanceof Error ? e.message : "Rank failed");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -314,7 +325,7 @@ function ResultsContent() {
     return () => {
       cancelled = true;
     };
-  }, [locale, showIntake, setConversationId, t]);
+  }, [locale, showIntake, setConversationId]);
 
   const handleIntakeSubmit = useCallback(async (inp: VignetteInput) => {
     setLoading(true);

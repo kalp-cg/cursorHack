@@ -55,3 +55,16 @@ CREATE INDEX IF NOT EXISTS idx_traces_user ON recommendation_traces (user_id, cr
 -- Curator analytics: what users asked that the corpus could not answer
 ALTER TABLE recommendation_traces ADD COLUMN IF NOT EXISTS unresolved_terms JSONB;
 ALTER TABLE recommendation_traces ADD COLUMN IF NOT EXISTS vignette_summary TEXT;
+
+-- Password reset (demo: code returned to client; no email SMTP required)
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    token_id     UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id      UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    token_hash   TEXT NOT NULL,
+    expires_at   TIMESTAMPTZ NOT NULL,
+    used_at      TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_user
+    ON password_reset_tokens (user_id, created_at DESC);

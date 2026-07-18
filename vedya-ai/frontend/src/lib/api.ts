@@ -331,6 +331,21 @@ export const api = {
   login: (body: { email: string; password: string }) =>
     apiFetch<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
 
+  forgotPassword: (email: string) =>
+    apiFetch<{
+      ok: boolean;
+      message: string;
+      emailed?: boolean;
+      reset_code?: string;
+      email?: string;
+    }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+
+  resetPassword: (body: { email: string; reset_code: string; new_password: string }) =>
+    apiFetch<{ ok: boolean; message: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   me: () => apiFetch<AuthUser>("/auth/me"),
 
   listConversations: () =>
@@ -344,14 +359,24 @@ export const api = {
       messages: Array<{ role: string; content_text: string; payload?: RecommendationResponse }>;
     }>(`/conversations/${id}`),
 
-  voiceStatus: () =>
-    apiFetch<{
+  voiceStatus: (() => {
+    let cached: Promise<{
       configured: boolean;
       tts_model: string;
       stt_model: string;
       default_voice_id: string;
       features: string[];
-    }>("/voice/status"),
+    }> | null = null;
+    return () => {
+      if (!cached) {
+        cached = apiFetch("/voice/status").catch((err) => {
+          cached = null;
+          throw err;
+        });
+      }
+      return cached;
+    };
+  })(),
 
   voiceTts: async (text: string, locale = "en") => {
     const form = new FormData();

@@ -33,8 +33,10 @@ from pipeline.evidence import build_evidence_pack, build_compare_packs
 from pipeline.explainer import explain_recommendation, explain_compare
 from auth import (
     AuthResponse, AuthUser, LoginRequest, SignupRequest,
+    ForgotPasswordRequest, ResetPasswordRequest,
     authenticate_user, create_access_token, create_user,
     fetch_user_by_id, get_optional_user, require_admin, require_user,
+    request_password_reset, reset_password,
 )
 from conversations import (
     add_message, assert_conversation_owner, build_followup_context,
@@ -46,8 +48,6 @@ from voice import (
 from fastapi.responses import Response
 from fastapi import File, Form, UploadFile
 from db_pool import init_pool, close_pool, pool_ready, get_connection
-from rate_limit import rate_limit
-
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://vedya:vedyapass@localhost:5433/vedyaai")
 LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
 CORPUS_VERSION = os.getenv("CORPUS_VERSION", "1.0.0")
@@ -173,8 +173,7 @@ async def health():
 
 
 @app.post("/auth/signup", response_model=AuthResponse, tags=["Auth"])
-async def signup(req: SignupRequest, request: Request):
-    rate_limit(request, limit=10, window_sec=60, bucket="auth")
+async def signup(req: SignupRequest):
     db = _get_db()
     user = create_user(db, req)
     token = create_access_token(user.user_id, user.email, user.role)
@@ -182,12 +181,24 @@ async def signup(req: SignupRequest, request: Request):
 
 
 @app.post("/auth/login", response_model=AuthResponse, tags=["Auth"])
-async def login(req: LoginRequest, request: Request):
-    rate_limit(request, limit=20, window_sec=60, bucket="auth")
+async def login(req: LoginRequest):
     db = _get_db()
     user = authenticate_user(db, req)
     token = create_access_token(user.user_id, user.email, user.role)
     return AuthResponse(access_token=token, user=user)
+
+
+@app.post("/auth/forgot-password", tags=["Auth"])
+async def forgot_password(req: ForgotPasswordRequest):
+    db = _get_db()
+    return request_password_reset(db, req.email)
+
+
+@app.post("/auth/reset-password", tags=["Auth"])
+async def reset_password_endpoint(req: ResetPasswordRequest):
+    db = _get_db()
+    reset_password(db, req)
+    return {"ok": True, "message": "Password updated. You can log in now."}
 
 
 @app.get("/auth/me", response_model=AuthUser, tags=["Auth"])
@@ -244,9 +255,8 @@ async def list_presets(locale: str = Query("en")):
 
 
 @app.post("/translate", response_model=TranslateResponse, tags=["i18n"])
-async def translate_endpoint(body: TranslateRequest, request: Request):
+async def translate_endpoint(body: TranslateRequest):
     """Batch-translate strings via free translation chain."""
-    rate_limit(request, limit=30, window_sec=60, bucket="translate")
     if not body.texts:
         return TranslateResponse(
             translations=[],
@@ -286,17 +296,14 @@ async def run_preset(
     if loc not in {"en", "gu"}:
         loc = "en"
     vignette = preset.vignette.model_copy(update={"locale": loc})
-    return await recommend(vignette, request=None, user=user)
+    return await recommend(vignette, user=user)
 
 
 @app.post("/recommend", response_model=RecommendationResponse, tags=["Core"])
 async def recommend(
     inp: VignetteInput,
-    request: Request = None,
     user: Optional[AuthUser] = Depends(get_optional_user),
 ):
-    if request is not None:
-        rate_limit(request, limit=40, window_sec=60, bucket="recommend")
     db = _get_db()
     trace_id = str(uuid.uuid4())
     conversation_id = inp.conversation_id
@@ -672,13 +679,11 @@ async def get_voice_status():
 
 @app.post("/voice/tts", tags=["Voice"])
 async def voice_tts(
-    request: Request,
     text: str = Form(...),
     locale: str = Form("en"),
     voice_id: Optional[str] = Form(None),
 ):
     """Speak arbitrary clinical text (explanation, compare reason, case read-aloud)."""
-    rate_limit(request, limit=15, window_sec=60, bucket="voice")
     if not voice_configured():
         raise HTTPException(
             status_code=503,
@@ -725,12 +730,10 @@ async def voice_listen_recommendation(
 
 @app.post("/voice/stt", tags=["Voice"])
 async def voice_stt(
-    request: Request,
     file: UploadFile = File(...),
     locale: str = Form("en"),
 ):
     """Transcribe a spoken vignette (browser mic recording) into text for /recommend."""
-    rate_limit(request, limit=15, window_sec=60, bucket="voice")
     if not voice_configured():
         raise HTTPException(
             status_code=503,
@@ -766,13 +769,11 @@ _DISCLAIMER = "Educational reference from classical sources — not a diagnosis 
 @app.post("/ask", tags=["Ask"])
 async def ask(
     req: AskRequest,
-    request: Request,
     user: Optional[AuthUser] = Depends(get_optional_user),
 ):
     """Question answering grounded in the 16k+ verse corpus.
     Query expansion via synonyms → FTS retrieval → citation-bound answer.
     Optional LLM narration when a key is configured; retrieval always decides content."""
-    rate_limit(request, limit=30, window_sec=60, bucket="ask")
     question = (req.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")

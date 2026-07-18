@@ -73,7 +73,7 @@ export default function DetailPage() {
       .then(setDetail)
       .catch((e) => setError(e instanceof Error ? e.message : t("notInCorpus")))
       .finally(() => setLoading(false));
-  }, [yogaId, t]);
+  }, [yogaId]);
 
   if (loading) {
     return (

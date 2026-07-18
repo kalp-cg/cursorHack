@@ -78,11 +78,19 @@ export default function HomePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     api
       .getPresets(locale)
-      .then(setPresets)
-      .catch(() => setError(t("loadPresetsError")));
-  }, [locale, t]);
+      .then((list) => {
+        if (!cancelled) setPresets(list);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Could not load presets");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [locale]);
 
   const sortedPresets = [...presets].sort((a, b) => {
     const oa = PRESET_META[a.id]?.order ?? 99;

@@ -9,8 +9,10 @@ Tools / mechanisms:
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -41,6 +43,16 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    reset_code: str = Field(..., min_length=6, max_length=12)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class AuthUser(BaseModel):
@@ -96,7 +108,7 @@ def validate_signup(req: SignupRequest) -> None:
         raise HTTPException(status_code=400, detail="Invalid email address")
     if len(req.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
-    if req.password.lower() in {req.email.lower(), "password", "12345678"}:
+    if req.password.lower() in {req.email.lower(), "password", "password123"}:
         raise HTTPException(status_code=400, detail="Password is too weak")
 
 
@@ -198,6 +210,125 @@ def authenticate_user(db, req: LoginRequest) -> AuthUser:
         preferred_locale=user["preferred_locale"],
         role=user.get("role", "user"),
     )
+
+
+def _hash_reset_code(code: str) -> str:
+    return hashlib.sha256(code.strip().upper().encode("utf-8")).hexdigest()
+
+
+def request_password_reset(db, email: str) -> dict[str, Any]:
+    """Issue a short reset code and email it when SMTP is configured."""
+    from email_service import send_password_reset_email, smtp_configured, smtp_dev_echo
+
+    normalized = normalize_email(email)
+    if not EMAIL_RE.match(normalized):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+
+    user = fetch_user_by_email(db, normalized)
+    # Same outer message whether or not the account exists (avoid enumeration)
+    if smtp_configured():
+        generic = {
+            "ok": True,
+            "message": "If that email is registered, a reset code was sent. Check your inbox and enter the code below.",
+            "emailed": True,
+        }
+    else:
+        generic = {
+            "ok": True,
+            "message": "If that email is registered, a reset code is ready. Enter it below with your new password.",
+            "emailed": False,
+        }
+
+    if not user or not user["is_active"]:
+        return generic
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    cur = db.cursor()
+    try:
+        cur.execute(
+            "UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = %s AND used_at IS NULL",
+            (user["user_id"],),
+        )
+        cur.execute(
+            """
+            INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+            VALUES (%s, %s, NOW() + INTERVAL '30 minutes')
+            """,
+            (user["user_id"], _hash_reset_code(code)),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        cur.close()
+
+    if smtp_configured():
+        try:
+            send_password_reset_email(to=user["email"], reset_code=code)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not send reset email: {exc}",
+            ) from exc
+        out = {**generic, "email": user["email"]}
+        # Never return the code in production responses; allow local echo for debugging
+        if smtp_dev_echo():
+            out["reset_code"] = code
+        return out
+
+    # No SMTP: surface code in API so the UI can still complete the flow
+    return {**generic, "reset_code": code, "email": user["email"]}
+
+
+def reset_password(db, req: ResetPasswordRequest) -> None:
+    email = normalize_email(req.email)
+    if not EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    if len(req.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if req.new_password.lower() in {email, "password", "password123"}:
+        raise HTTPException(status_code=400, detail="Password is too weak")
+
+    user = fetch_user_by_email(db, email)
+    if not user or not user["is_active"]:
+        raise HTTPException(status_code=400, detail="Invalid reset code or email")
+
+    cur = db.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT token_id::text FROM password_reset_tokens
+            WHERE user_id = %s
+              AND token_hash = %s
+              AND used_at IS NULL
+              AND expires_at > NOW()
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (user["user_id"], _hash_reset_code(req.reset_code)),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+
+        cur.execute(
+            "UPDATE users SET password_hash = %s WHERE user_id = %s",
+            (hash_password(req.new_password), user["user_id"]),
+        )
+        cur.execute(
+            "UPDATE password_reset_tokens SET used_at = NOW() WHERE token_id = %s",
+            (row[0],),
+        )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        cur.close()
 
 
 def get_optional_user(

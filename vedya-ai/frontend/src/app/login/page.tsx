@@ -68,6 +68,9 @@ function LoginForm() {
               minLength={8}
             />
           </div>
+          <p style={{ margin: "-0.35rem 0 0.85rem", textAlign: "right", fontSize: "0.85rem" }}>
+            <Link href="/forgot-password">{t("forgotPassword")}</Link>
+          </p>
           {error ? <p className="veda-error">{error}</p> : null}
           <PrimaryButton type="submit" disabled={loading} style={{ width: "100%" }}>
             {loading ? t("pleaseWait") : t("login")}

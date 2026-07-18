@@ -45,7 +45,7 @@ function CompareContent() {
       .then(setResult)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [yogaAId, yogaBId, locale, t]);
+  }, [yogaAId, yogaBId, locale]);
 
   const winnerName =
     result?.winner_yoga_id === result?.yoga_a.yoga_id

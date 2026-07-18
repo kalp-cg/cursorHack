@@ -84,7 +84,7 @@ async def synthesize_speech(
 
     vid = voice_id or _voice_id()
     model = _tts_model()
-    language_code = locale if locale in {"en", "hi", "gu"} else "en"
+    language_code = locale if locale in {"en", "gu"} else "en"
 
     payload = {
         "text": cleaned,
@@ -123,7 +123,7 @@ async def transcribe_audio(
     if not file_bytes:
         raise ValueError("Empty audio")
 
-    language_code = locale if locale in {"en", "hi", "gu"} else None
+    language_code = locale if locale in {"en", "gu"} else None
     headers = {"xi-api-key": key}
 
     content_type = "audio/webm"
@@ -164,18 +164,8 @@ def build_listen_script(
     winner_reason: str | None = None,
     locale: str = "en",
 ) -> str:
-    locale = locale if locale in {"en", "hi", "gu"} else "en"
+    locale = locale if locale in {"en", "gu"} else "en"
     form = kalpana or ""
-    if locale == "hi":
-        parts = [f"शीर्ष अनुशंसा: {yoga_name}"]
-        if form:
-            parts.append(f"कल्पना: {form}")
-        if summary:
-            parts.append(summary)
-        if winner_reason:
-            parts.append(f"तुलना: {winner_reason}")
-        parts.append("यह शैक्षिक निर्णय सहायता है, निदान या नुस्खा नहीं।")
-        return " ".join(parts)
     if locale == "gu":
         parts = [f"ટોચની ભલામણ: {yoga_name}"]
         if form:
