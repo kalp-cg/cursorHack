@@ -1,0 +1,84 @@
+{
+  "trace_id": "demo-shotha-preset-001",
+  "vignette_summary": "Fever, Cough, Edema — Shotha (Generalized Inflammation)",
+  "resolved_concepts": [
+    {"surface_form": "Fever", "canonical_name": "Jvara", "concept_id": "auto", "concept_type": "roga", "synonyms_used": ["Santapa"]},
+    {"surface_form": "Cough", "canonical_name": "Kasa", "concept_id": "auto", "concept_type": "lakshana", "synonyms_used": []},
+    {"surface_form": "Shotha", "canonical_name": "Shotha", "concept_id": "auto", "concept_type": "lakshana", "synonyms_used": ["Shopha", "Edema", "Swelling", "Inflammation"]}
+  ],
+  "sense_disambiguations": [],
+  "unresolved_terms": [],
+  "safety_alerts": [],
+  "results": [
+    {
+      "rank": 1,
+      "yoga_id": "punarnavadi-001",
+      "yoga_name": "Punarnavadi Kashayam",
+      "kalpana": "Kwatha/Kashayam",
+      "category": "Urinary System",
+      "score": 9.0,
+      "rank_features": {
+        "primary_indication_match": 9.0,
+        "secondary_indication_match": 0.0,
+        "property_fit": 0.0,
+        "citation_bonus": 0.5,
+        "contraindication_penalty": 0.0,
+        "medium_penalty": 0.0,
+        "total_score": 9.0
+      },
+      "safety_violations": [],
+      "hard_excluded": false,
+      "primary_indications": ["Mutra Vikara", "Shotha", "Jvara", "Kasa", "Pandu", "Jalodara"],
+      "secondary_indications": ["Santapa", "Fever"],
+      "references": [{"ref_id": "ref-ashtanga-001", "work": "Ashtanga Hrudayam, Shotha Chikitsa", "sthana": null, "chapter": null, "verse_id": null, "excerpt_text": "Diuretic and anti-inflammatory decoction for Shotha (edema), Jvara, Kasa, anemia, and ascites."}],
+      "explanation": {
+        "summary": "Punarnavadi Kashayam is the preferred choice when generalized inflammatory swelling (Shotha) is present alongside fever and cough. Punarnava's diuretic and anti-inflammatory properties directly address the systemic edematous component. This presentation does NOT match Vyaghryadi's specialization in upper respiratory URTI/Pinasa.",
+        "claims": [
+          {"text": "Shotha (edema/systemic inflammation) is a primary indication of Punarnavadi Kashayam.", "ref_ids": ["ref-ashtanga-001"]},
+          {"text": "Punarnava (Boerhavia diffusa) has Shothaghna (anti-edematous) and diuretic properties that address the systemic inflammatory component.", "ref_ids": ["ref-ashtanga-001"]},
+          {"text": "Vyaghryadi Kashayam, while sharing Jvara and Kasa indication, lacks specific Shotha (edema) targeting.", "ref_ids": []}
+        ],
+        "llm_used": false,
+        "template_fallback": false
+      },
+      "differentiation_note": "Best suited when generalized inflammatory swelling (Shotha) is the dominant feature — differs from Vyaghryadi which targets upper respiratory URTI.",
+      "dosage": "15-30 ml",
+      "anupana": "With water before food",
+      "coverage_note": null
+    },
+    {
+      "rank": 2,
+      "yoga_id": "vyaghryadi-001",
+      "yoga_name": "Vyaghryadi Kashayam",
+      "kalpana": "Kwatha/Kashayam",
+      "category": "Respiratory System",
+      "score": 6.0,
+      "rank_features": {
+        "primary_indication_match": 6.0,
+        "secondary_indication_match": 0.0,
+        "property_fit": 0.0,
+        "citation_bonus": 0.5,
+        "contraindication_penalty": 0.0,
+        "medium_penalty": 0.0,
+        "total_score": 6.0
+      },
+      "safety_violations": [],
+      "hard_excluded": false,
+      "primary_indications": ["Jvara", "Kasa", "Pinasa", "Shwasa"],
+      "secondary_indications": [],
+      "references": [{"ref_id": "ref-sharngadhara-001", "work": "Sharngadhara Samhita, Madhyama Khanda 2", "sthana": null, "chapter": null, "verse_id": null, "excerpt_text": "Indicated in Jvara and Kasa — specializes in Pinasa/URTI. Does not address Shotha."}],
+      "explanation": {"summary": "Vyaghryadi matches Jvara and Kasa but does NOT have Shotha (edema) as an indication. For systemic inflammatory presentations, Punarnavadi is the superior choice.", "claims": [], "llm_used": false, "template_fallback": true},
+      "differentiation_note": "More suitable for Pinasa (URTI/common cold) than for systemic Shotha.",
+      "dosage": "15-30 ml",
+      "anupana": "Warm water before food",
+      "coverage_note": null
+    }
+  ],
+  "total_candidates": 18,
+  "excluded_count": 0,
+  "warned_count": 0,
+  "corpus_version": "1.0.0",
+  "llm_used": false,
+  "coverage_note": null,
+  "disclaimer": "Educational decision support only. Not a diagnosis or prescription. Clinical judgment of a qualified vaidya is required."
+}
