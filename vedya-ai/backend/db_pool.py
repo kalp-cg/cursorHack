@@ -12,6 +12,15 @@ from fastapi import HTTPException
 _pool: Optional[pool.ThreadedConnectionPool] = None
 
 
+def _ensure_search_path(conn) -> None:
+    """Neon pooler sessions can start with an empty search_path."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SET search_path TO public")
+    except Exception:
+        pass
+
+
 def init_pool(dsn: str | None = None, minconn: int = 1, maxconn: int = 8) -> None:
     global _pool
     url = dsn or os.getenv("DATABASE_URL", "postgresql://vedya:vedyapass@localhost:5433/vedyaai")
@@ -37,12 +46,14 @@ def get_connection() -> Generator:
         raise HTTPException(status_code=503, detail="Database unavailable")
     conn = _pool.getconn()
     try:
+        _ensure_search_path(conn)
         yield conn
     finally:
         try:
             # Always return a clean connection to the pool
             if conn.closed == 0:
                 conn.rollback()
+                _ensure_search_path(conn)
         except Exception:
             pass
         _pool.putconn(conn)
@@ -54,11 +65,13 @@ def get_db():
         raise HTTPException(status_code=503, detail="Database unavailable")
     conn = _pool.getconn()
     try:
+        _ensure_search_path(conn)
         yield conn
     finally:
         try:
             if conn.closed == 0:
                 conn.rollback()
+                _ensure_search_path(conn)
         except Exception:
             pass
         _pool.putconn(conn)

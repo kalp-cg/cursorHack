@@ -9,7 +9,12 @@ def get_connection():
         "DATABASE_URL",
         "postgresql://vedya:vedyapass@localhost:5432/vedyaai",
     )
-    return psycopg2.connect(url)
+    conn = psycopg2.connect(url)
+    # Neon pooler can start with an empty search_path
+    with conn.cursor() as cur:
+        cur.execute("SET search_path TO public")
+    conn.commit()
+    return conn
 
 
 def upsert_concept(cur, canonical_name: str, type_: str) -> str:
