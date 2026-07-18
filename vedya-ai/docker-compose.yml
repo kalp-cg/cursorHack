@@ -1,0 +1,62 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: vedya_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vedya
+      POSTGRES_PASSWORD: vedyapass
+      POSTGRES_DB: vedyaai
+    ports:
+      - "5432:5432"
+    volumes:
+      - vedya_pgdata:/var/lib/postgresql/data
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vedya -d vedyaai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vedya_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://vedya:vedyapass@postgres:5432/vedyaai
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_ENABLED: ${LLM_ENABLED:-true}
+      CORPUS_VERSION: "1.0.0"
+      LOG_LEVEL: info
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vedya_frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+
+volumes:
+  vedya_pgdata:
