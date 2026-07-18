@@ -15,6 +15,10 @@ import CaseChip from "@/components/CaseChip";
 import TermChip from "@/components/TermChip";
 import PrimaryButton from "@/components/PrimaryButton";
 import CitationCard from "@/components/CitationCard";
+import ListenButton from "@/components/ListenButton";
+import VoiceMic from "@/components/VoiceMic";
+import CounterfactualPanel from "@/components/CounterfactualPanel";
+import ShareCaseBar, { decodeCaseParam } from "@/components/ShareCaseBar";
 import { useApp } from "@/lib/app-context";
 import Link from "next/link";
 
@@ -66,7 +70,7 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
         onChange={(e) => setFreeText(e.target.value)}
         placeholder={t("vignettePlaceholder")}
         rows={3}
-        className="w-full rounded-xl px-4 py-3 text-sm mb-6 resize-none outline-none"
+        className="w-full rounded-xl px-4 py-3 text-sm mb-3 resize-none outline-none"
         style={{
           background: "var(--veda-shila-deep)",
           border: "1px solid var(--veda-fog)",
@@ -74,6 +78,9 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
           fontFamily: "var(--font-ui)",
         }}
       />
+      <div className="mb-6">
+        <VoiceMic onTranscript={(text) => setFreeText((prev) => (prev ? `${prev} ${text}` : text))} />
+      </div>
 
       <label className="block text-sm font-medium mb-1" style={{ color: "var(--veda-ink)" }}>
         {t("symptomsLabel")}
@@ -159,6 +166,27 @@ function ResultsContent() {
       setLoading(false);
       return;
     }
+
+    const caseParam = searchParams.get("case");
+    if (caseParam) {
+      const decoded = decodeCaseParam(caseParam);
+      if (decoded) {
+        setLoading(true);
+        const payload = { ...decoded, locale: decoded.locale || locale };
+        sessionStorage.setItem("vedya_input", JSON.stringify(payload));
+        api
+          .recommend(payload)
+          .then((result) => {
+            if (result.conversation_id) setConversationId(result.conversation_id);
+            sessionStorage.setItem("vedya_results", JSON.stringify(result));
+            setResponse(result);
+          })
+          .catch(console.error)
+          .finally(() => setLoading(false));
+        return;
+      }
+    }
+
     const stored = sessionStorage.getItem("vedya_results");
     if (stored) {
       const parsed = JSON.parse(stored) as RecommendationResponse;
@@ -166,13 +194,15 @@ function ResultsContent() {
       if (parsed.conversation_id) setConversationId(parsed.conversation_id);
     }
     setLoading(false);
-  }, [searchParams, setConversationId]);
+  }, [searchParams, setConversationId, locale]);
 
   const handleIntakeSubmit = useCallback(async (inp: VignetteInput) => {
     setLoading(true);
     try {
-      const result = await api.recommend({ ...inp, locale });
+      const payload = { ...inp, locale };
+      const result = await api.recommend(payload);
       if (result.conversation_id) setConversationId(result.conversation_id);
+      sessionStorage.setItem("vedya_input", JSON.stringify(payload));
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       setResponse(result);
       setShowIntake(false);
@@ -199,6 +229,19 @@ function ResultsContent() {
       });
       if (result.conversation_id) setConversationId(result.conversation_id);
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
+      sessionStorage.setItem(
+        "vedya_input",
+        JSON.stringify({
+          free_text: followUp.trim(),
+          symptoms: [],
+          rogas: [],
+          comorbidities: [],
+          top_k: 10,
+          locale,
+          conversation_id: result.conversation_id,
+          follow_up: true,
+        })
+      );
       setResponse(result);
       setFollowUp("");
     } catch (e) {
@@ -305,6 +348,13 @@ function ResultsContent() {
                 {topResult.explanation.summary}
               </p>
             )}
+            <div className="mb-4">
+              <ListenButton
+                yogaName={topResult.yoga_name}
+                kalpana={topResult.kalpana || ""}
+                summary={topResult.explanation?.summary || ""}
+              />
+            </div>
             {topResult.references.slice(0, 1).map((r) => (
               <CitationCard key={r.ref_id} reference={r} />
             ))}
@@ -316,23 +366,44 @@ function ResultsContent() {
           </div>
         )}
 
+        <CounterfactualPanel
+          baseline={response}
+          onApplied={(next) => {
+            setResponse(next);
+            if (next.conversation_id) setConversationId(next.conversation_id);
+          }}
+        />
+
         {/* 3. Compare teaser */}
         {activeResults.length >= 2 && (
           <div
-            className="rounded-xl p-4 mb-6 flex items-center justify-between"
+            className="rounded-xl p-4 mb-6 flex flex-wrap items-center justify-between gap-3"
             style={{ background: "var(--veda-harita-soft)", border: "1px solid var(--veda-harita)" }}
           >
             <span className="text-sm font-medium" style={{ color: "var(--veda-harita)" }}>
               {t("whyOver", { a: activeResults[0]?.yoga_name || "", b: activeResults[1]?.yoga_name || "" })}
             </span>
-            <PrimaryButton
-              size="sm"
-              onClick={() =>
-                router.push(`/compare?a=${activeResults[0].yoga_id}&b=${activeResults[1].yoga_id}`)
-              }
-            >
-              {t("compare")} →
-            </PrimaryButton>
+            <div className="flex flex-wrap items-center gap-2">
+              <ListenButton
+                yogaName={activeResults[0].yoga_name}
+                summary={
+                  activeResults[0].explanation?.summary ||
+                  `${activeResults[0].yoga_name} vs ${activeResults[1].yoga_name}`
+                }
+                winnerReason={t("whyOver", {
+                  a: activeResults[0].yoga_name,
+                  b: activeResults[1].yoga_name,
+                })}
+              />
+              <PrimaryButton
+                size="sm"
+                onClick={() =>
+                  router.push(`/compare?a=${activeResults[0].yoga_id}&b=${activeResults[1].yoga_id}`)
+                }
+              >
+                {t("compare")} →
+              </PrimaryButton>
+            </div>
           </div>
         )}
 
@@ -386,17 +457,20 @@ function ResultsContent() {
             {user ? t("followUpHint") : t("loginToContinue")}
           </p>
           {user ? (
-            <div className="flex gap-2">
-              <input
-                className="veda-input flex-1"
-                value={followUp}
-                onChange={(e) => setFollowUp(e.target.value)}
-                placeholder={t("followUpPlaceholder")}
-                onKeyDown={(e) => e.key === "Enter" && askFollowUp()}
-              />
-              <PrimaryButton onClick={askFollowUp} disabled={asking || !followUp.trim()}>
-                {asking ? t("running") : t("askFollowUp")}
-              </PrimaryButton>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <input
+                  className="veda-input flex-1"
+                  value={followUp}
+                  onChange={(e) => setFollowUp(e.target.value)}
+                  placeholder={t("followUpPlaceholder")}
+                  onKeyDown={(e) => e.key === "Enter" && askFollowUp()}
+                />
+                <PrimaryButton onClick={askFollowUp} disabled={asking || !followUp.trim()}>
+                  {asking ? t("running") : t("askFollowUp")}
+                </PrimaryButton>
+              </div>
+              <VoiceMic onTranscript={(text) => setFollowUp((prev) => (prev ? `${prev} ${text}` : text))} />
             </div>
           ) : (
             <Link href="/login" style={{ color: "var(--veda-harita)", fontSize: "0.9rem" }}>
@@ -404,6 +478,8 @@ function ResultsContent() {
             </Link>
           )}
         </div>
+
+        <ShareCaseBar response={response} />
 
         {/* Stats */}
         <div className="mt-8 grid grid-cols-3 gap-4 text-center">

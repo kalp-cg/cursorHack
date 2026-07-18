@@ -476,3 +476,213 @@ button, input, textarea {
   font-size: 0.85rem;
   margin: 0 0 0.75rem;
 }
+
+/* ── Voice (ElevenLabs) ── */
+.veda-hero-voice {
+  margin-top: 0.85rem;
+  display: flex;
+  justify-content: center;
+}
+
+.veda-preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.veda-listen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--veda-harita);
+  background: var(--veda-harita-soft);
+  color: var(--veda-harita);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.veda-listen-btn:hover:not(:disabled) {
+  background: #cfe8dc;
+  transform: translateY(-1px);
+}
+
+.veda-listen-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.veda-voice-hint {
+  font-size: 0.72rem;
+  color: var(--veda-fog);
+  font-weight: 500;
+}
+
+.veda-mic-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.veda-mic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(247, 249, 248, 0.35);
+  background: rgba(247, 249, 248, 0.08);
+  color: #F7F9F8;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.veda-mic-btn .veda-mic-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #7dcea0;
+  box-shadow: 0 0 0 0 rgba(125, 206, 160, 0.5);
+  animation: veda-pulse 1.8s ease-in-out infinite;
+}
+
+.veda-mic-btn.is-recording {
+  border-color: #f0a0a0;
+  background: rgba(180, 35, 24, 0.25);
+}
+
+.veda-mic-btn.is-recording .veda-mic-dot {
+  background: #f07167;
+  animation: veda-pulse-rec 1s ease-in-out infinite;
+}
+
+.veda-mic-error {
+  font-size: 0.72rem;
+  color: #f0c0b8;
+}
+
+/* Light surfaces (intake panel) */
+.veda-page .veda-mic-btn,
+.max-w-2xl .veda-mic-btn {
+  border-color: var(--veda-harita);
+  background: var(--veda-harita-soft);
+  color: var(--veda-harita);
+}
+
+.veda-page .veda-mic-error,
+.max-w-2xl .veda-mic-error {
+  color: var(--veda-agni);
+}
+
+@keyframes veda-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(125, 206, 160, 0.45); }
+  50% { box-shadow: 0 0 0 6px rgba(125, 206, 160, 0); }
+}
+
+@keyframes veda-pulse-rec {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.7; }
+}
+
+/* Counterfactual panel */
+.veda-cf-panel {
+  border-radius: var(--veda-radius-lg);
+  border: 1px solid var(--veda-kesar);
+  background: linear-gradient(135deg, var(--veda-kesar-soft) 0%, var(--veda-surface) 70%);
+  padding: 1.15rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.veda-cf-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--veda-ink);
+  margin: 0 0 0.25rem;
+}
+
+.veda-cf-hint {
+  font-size: 0.82rem;
+  color: var(--veda-ink-soft);
+  margin: 0 0 0.85rem;
+}
+
+.veda-cf-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.veda-cf-toggle {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--veda-fog);
+  background: var(--veda-surface);
+  color: var(--veda-ink-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 40px;
+  transition: all 150ms ease;
+}
+
+.veda-cf-toggle.is-on {
+  border-color: var(--veda-kesar);
+  background: var(--veda-kesar-soft);
+  color: var(--veda-kesar);
+}
+
+.veda-cf-delta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .veda-cf-delta {
+    grid-template-columns: 1fr;
+  }
+}
+
+.veda-cf-card {
+  background: var(--veda-surface);
+  border: 1px solid var(--veda-shila-deep);
+  border-radius: var(--veda-radius);
+  padding: 0.75rem 0.9rem;
+}
+
+.veda-cf-card-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--veda-fog);
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.veda-cf-card-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--veda-ink);
+}
+
+.veda-cf-card-meta {
+  font-size: 0.78rem;
+  color: var(--veda-ink-soft);
+  margin-top: 0.2rem;
+}
+
+.veda-share-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

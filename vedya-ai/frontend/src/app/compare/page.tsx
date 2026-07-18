@@ -4,9 +4,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api, CompareResult } from "@/lib/api";
 import CompareTable from "@/components/CompareTable";
 import PrimaryButton from "@/components/PrimaryButton";
+import ListenButton from "@/components/ListenButton";
+import { useApp } from "@/lib/app-context";
 
 function CompareContent() {
   const router = useRouter();
+  const { t, locale } = useApp();
   const params = useSearchParams();
   const yogaAId = params.get("a") || "";
   const yogaBId = params.get("b") || "";
@@ -24,15 +27,21 @@ function CompareContent() {
     const stored = sessionStorage.getItem("vedya_results");
     const currentInput = stored ? JSON.parse(stored)?.vignette_summary : undefined;
     api
-      .compare(yogaAId, yogaBId, currentInput ? { free_text: currentInput } : undefined)
+      .compare(yogaAId, yogaBId, currentInput ? { free_text: currentInput, locale } : { locale })
       .then(setResult)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [yogaAId, yogaBId]);
+  }, [yogaAId, yogaBId, locale]);
+
+  const winnerName =
+    result?.winner_yoga_id === result?.yoga_a.yoga_id
+      ? result?.yoga_a.yoga_name
+      : result?.winner_yoga_id === result?.yoga_b.yoga_id
+        ? result?.yoga_b.yoga_name
+        : result?.yoga_a.yoga_name;
 
   return (
     <div style={{ background: "var(--veda-shila)", minHeight: "100vh" }}>
-      {/* Header */}
       <div
         className="sticky top-0 z-10 px-6 py-3 flex items-center gap-4"
         style={{ background: "var(--veda-ink)" }}
@@ -44,26 +53,41 @@ function CompareContent() {
           className="text-base font-semibold"
           style={{ fontFamily: "var(--font-display)", color: "#F7F9F8" }}
         >
-          Compare
+          {t("compare")}
         </span>
       </div>
 
       <div className="max-w-5xl mx-auto px-6 py-8">
-        <h1
-          className="text-2xl font-medium mb-6"
-          style={{ fontFamily: "var(--font-display)", color: "var(--veda-ink)" }}
-        >
-          Formulation Comparison
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h1
+            className="text-2xl font-medium"
+            style={{ fontFamily: "var(--font-display)", color: "var(--veda-ink)" }}
+          >
+            Formulation Comparison
+          </h1>
+          {result && (
+            <ListenButton
+              yogaName={winnerName || result.yoga_a.yoga_name}
+              summary={result.discrimination_explanation?.summary || ""}
+              winnerReason={result.winner_reason || t("speakWhy")}
+            />
+          )}
+        </div>
 
         {loading && (
           <div className="flex justify-center py-16">
-            <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--veda-harita)" }} />
+            <div
+              className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+              style={{ borderColor: "var(--veda-harita)" }}
+            />
           </div>
         )}
 
         {error && (
-          <div className="text-sm p-4 rounded-xl" style={{ background: "var(--veda-agni-soft)", color: "var(--veda-agni)" }}>
+          <div
+            className="text-sm p-4 rounded-xl"
+            style={{ background: "var(--veda-agni-soft)", color: "var(--veda-agni)" }}
+          >
             {error}
           </div>
         )}

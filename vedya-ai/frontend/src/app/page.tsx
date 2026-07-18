@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, PresetVignette } from "@/lib/api";
 import PrimaryButton from "@/components/PrimaryButton";
+import VoiceMic from "@/components/VoiceMic";
+import ListenButton from "@/components/ListenButton";
 import { useApp } from "@/lib/app-context";
 
 function PresetCard({
@@ -18,6 +20,14 @@ function PresetCard({
   openLabel: string;
   runningLabel: string;
 }) {
+  const caseText = [
+    preset.label,
+    preset.description,
+    preset.vignette.free_text || (preset.vignette.symptoms || []).join(", "),
+  ]
+    .filter(Boolean)
+    .join(". ");
+
   return (
     <article
       className="veda-preset-card"
@@ -30,7 +40,7 @@ function PresetCard({
     >
       <h3 className="veda-preset-label">{preset.label}</h3>
       <p className="veda-preset-desc">{preset.description}</p>
-      <div>
+      <div className="veda-preset-actions" onClick={(e) => e.stopPropagation()}>
         <PrimaryButton
           size="sm"
           onClick={(e) => {
@@ -41,6 +51,7 @@ function PresetCard({
         >
           {loading ? runningLabel : openLabel}
         </PrimaryButton>
+        <ListenButton rawText={caseText} yogaName={preset.label} size="sm" />
       </div>
     </article>
   );
@@ -63,6 +74,13 @@ export default function HomePage() {
     try {
       const result = await api.runPreset(presetId);
       if (result.conversation_id) setConversationId(result.conversation_id);
+      const preset = presets.find((p) => p.id === presetId);
+      if (preset?.vignette) {
+        sessionStorage.setItem(
+          "vedya_input",
+          JSON.stringify({ ...preset.vignette, locale })
+        );
+      }
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       router.push("/results");
     } catch (e) {
@@ -85,6 +103,17 @@ export default function HomePage() {
         locale,
       });
       if (result.conversation_id) setConversationId(result.conversation_id);
+      sessionStorage.setItem(
+        "vedya_input",
+        JSON.stringify({
+          free_text: freeText,
+          symptoms: [],
+          rogas: [],
+          comorbidities: [],
+          top_k: 10,
+          locale,
+        })
+      );
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       router.push("/results");
     } catch (e) {
@@ -116,6 +145,10 @@ export default function HomePage() {
             <PrimaryButton onClick={runFreeText} disabled={running || !freeText.trim()}>
               {running ? t("ranking") : t("rank")}
             </PrimaryButton>
+          </div>
+
+          <div className="veda-hero-voice">
+            <VoiceMic onTranscript={(text) => setFreeText((prev) => (prev ? `${prev} ${text}` : text))} />
           </div>
 
           <p className="veda-hint">{t("orPreset")}</p>
