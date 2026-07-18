@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import psycopg2
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from models.schemas import (
@@ -28,6 +28,15 @@ from pipeline.safety import SafetyEngine
 from pipeline.ranker import rank
 from pipeline.evidence import build_evidence_pack, build_compare_packs
 from pipeline.explainer import explain_recommendation, explain_compare
+from auth import (
+    AuthResponse, AuthUser, LoginRequest, SignupRequest,
+    authenticate_user, create_access_token, create_user,
+    fetch_user_by_id, get_optional_user, require_user,
+)
+from conversations import (
+    add_message, assert_conversation_owner, build_followup_context,
+    create_conversation, get_messages, list_conversations,
+)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://vedya:vedyapass@localhost:5432/vedyaai")
 LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
@@ -82,7 +91,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # Dev-friendly origins; tighten for production deployments
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -132,23 +146,87 @@ async def health():
     )
 
 
+@app.post("/auth/signup", response_model=AuthResponse, tags=["Auth"])
+async def signup(req: SignupRequest):
+    db = _get_db()
+    user = create_user(db, req)
+    token = create_access_token(user.user_id, user.email)
+    return AuthResponse(access_token=token, user=user)
+
+
+@app.post("/auth/login", response_model=AuthResponse, tags=["Auth"])
+async def login(req: LoginRequest):
+    db = _get_db()
+    user = authenticate_user(db, req)
+    token = create_access_token(user.user_id, user.email)
+    return AuthResponse(access_token=token, user=user)
+
+
+@app.get("/auth/me", response_model=AuthUser, tags=["Auth"])
+async def me(user: AuthUser = Depends(require_user)):
+    db = _get_db()
+    row = fetch_user_by_id(db, user.user_id)
+    if not row or not row["is_active"]:
+        raise HTTPException(status_code=401, detail="User not found")
+    return AuthUser(
+        user_id=row["user_id"],
+        email=row["email"],
+        display_name=row["display_name"],
+        preferred_locale=row["preferred_locale"],
+    )
+
+
+@app.get("/conversations", tags=["Conversations"])
+async def conversations_list(user: AuthUser = Depends(require_user)):
+    db = _get_db()
+    return list_conversations(db, user.user_id)
+
+
+@app.get("/conversations/{conversation_id}", tags=["Conversations"])
+async def conversation_detail(conversation_id: str, user: AuthUser = Depends(require_user)):
+    db = _get_db()
+    meta = assert_conversation_owner(db, conversation_id, user.user_id)
+    return {"conversation": meta, "messages": get_messages(db, conversation_id, user.user_id)}
+
+
 @app.get("/presets", response_model=list[PresetVignette], tags=["Demo"])
 async def list_presets():
     return get_presets()
 
 
 @app.get("/presets/{preset_id}", tags=["Demo"])
-async def run_preset(preset_id: str):
+async def run_preset(preset_id: str, user: Optional[AuthUser] = Depends(get_optional_user)):
     preset = get_preset(preset_id)
     if not preset:
         raise HTTPException(status_code=404, detail=f"Preset '{preset_id}' not found")
-    return await recommend(preset.vignette)
+    return await recommend(preset.vignette, user=user)
 
 
 @app.post("/recommend", response_model=RecommendationResponse, tags=["Core"])
-async def recommend(inp: VignetteInput):
+async def recommend(inp: VignetteInput, user: Optional[AuthUser] = Depends(get_optional_user)):
     db = _get_db()
     trace_id = str(uuid.uuid4())
+    conversation_id = inp.conversation_id
+    locale = (inp.locale or "en").lower()
+    if locale not in {"en", "hi", "gu"}:
+        locale = "en"
+
+    # Conversation continuity (authenticated users)
+    if user and inp.follow_up and conversation_id:
+        assert_conversation_owner(db, conversation_id, user.user_id)
+        follow_text = (inp.free_text or "").strip()
+        if not follow_text:
+            raise HTTPException(status_code=400, detail="Follow-up text required")
+        merged = build_followup_context(db, conversation_id, follow_text)
+        inp = inp.model_copy(update={"free_text": merged})
+        add_message(db, conversation_id, "user", follow_text)
+    elif user and not conversation_id:
+        title = (inp.free_text or ",".join(inp.symptoms + inp.rogas) or "Clinical case")[:120]
+        conversation_id = create_conversation(db, user.user_id, title, locale)
+        add_message(db, conversation_id, "user", inp.free_text or title)
+    elif conversation_id and not user:
+        # Guests cannot attach to persisted conversations
+        conversation_id = None
 
     # 1. Validate & normalize
     inp = validate_and_normalize(inp)
@@ -166,6 +244,7 @@ async def recommend(inp: VignetteInput):
             vignette_summary=frame.raw_input[:100],
             unresolved_terms=resolver_output.unresolved_terms,
             coverage_note="No recognized Ayurvedic terms found. Try adding symptoms like 'Jvara', 'Kasa', 'Pinasa'.",
+            conversation_id=conversation_id,
         )
 
     # 4. Candidate retrieval
@@ -179,6 +258,7 @@ async def recommend(inp: VignetteInput):
             unresolved_terms=resolver_output.unresolved_terms,
             sense_disambiguations=resolver_output.sense_disambiguations,
             coverage_note="No formulations found for these conditions in the current corpus.",
+            conversation_id=conversation_id,
         )
 
     # 5. Safety engine (deterministic)
@@ -210,15 +290,15 @@ async def recommend(inp: VignetteInput):
         if explanation.llm_used:
             llm_used = True
 
-    # Log trace (anonymous)
+    # Log trace (anonymous hash; user/conversation linked when authenticated)
     try:
         vignette_hash = hashlib.sha256(json.dumps(inp.model_dump(), sort_keys=True).encode()).hexdigest()[:16]
         cur = db.cursor()
         cur.execute(
             """
             INSERT INTO recommendation_traces
-                (trace_id, vignette_hash, corpus_version, llm_used, top_yoga_id, feature_vector, safety_hits)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (trace_id, vignette_hash, corpus_version, llm_used, top_yoga_id, feature_vector, safety_hits, user_id, conversation_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 trace_id,
@@ -228,18 +308,23 @@ async def recommend(inp: VignetteInput):
                 ranked[0].yoga_id if ranked else None,
                 json.dumps(ranked[0].rank_features.model_dump()) if ranked else None,
                 json.dumps([v.rule_id for v in global_alerts]),
+                user.user_id if user else None,
+                conversation_id,
             ),
         )
         db.commit()
         cur.close()
     except Exception:
-        pass  # Trace logging is non-critical
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
     coverage_note = None
     if resolver_output.unresolved_terms:
         coverage_note = f"Could not resolve: {', '.join(resolver_output.unresolved_terms[:5])}"
 
-    return RecommendationResponse(
+    response = RecommendationResponse(
         trace_id=trace_id,
         vignette_summary=vignette_summary,
         resolved_concepts=resolver_output.resolved_concepts,
@@ -253,7 +338,21 @@ async def recommend(inp: VignetteInput):
         corpus_version=CORPUS_VERSION,
         llm_used=llm_used,
         coverage_note=coverage_note,
+        conversation_id=conversation_id,
     )
+
+    if user and conversation_id:
+        top_name = ranked[0].yoga_name if ranked else "No match"
+        summary = f"Top pick: {top_name}. {vignette_summary}"
+        add_message(
+            db,
+            conversation_id,
+            "assistant",
+            summary,
+            payload=response.model_dump(mode="json"),
+        )
+
+    return response
 
 
 @app.get("/formulation/{yoga_id}", tags=["Core"])
