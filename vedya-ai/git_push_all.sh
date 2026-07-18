@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
 # =============================================================================
 # VedyaAI — Granular Git Commit & Push Script
-# Makes 50+ meaningful commits (one per logical unit) then pushes to origin.
+# Run from the repo root: /home/kalppatel/Desktop/cursorHack
+# Makes 50+ meaningful commits (one per logical unit) then pushes to GitHub.
 # =============================================================================
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT"
+# Always work from the git repo root (parent of vedya-ai/)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+echo ""
+echo "================================================================"
+echo "  VedyaAI — Git Commit + Push"
+echo "  Repo root : $REPO_ROOT"
+echo "  Remote    : $(git remote get-url origin)"
+echo "================================================================"
+echo ""
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 commit() {
   local msg="$1"
   shift
-  # Only add if files exist
   local files=()
   for f in "$@"; do
     if [ -e "$f" ]; then
@@ -20,57 +29,33 @@ commit() {
     fi
   done
   if [ ${#files[@]} -eq 0 ]; then
-    echo "  [skip] no files for: $msg"
+    echo "  [skip] no files: $msg"
     return
   fi
   git add "${files[@]}"
-  # Only commit if there are staged changes
   if git diff --cached --quiet; then
-    echo "  [skip] nothing new for: $msg"
+    echo "  [skip] nothing new: $msg"
     return
   fi
   git commit -m "$msg"
   echo "  ✓ $msg"
 }
 
-commit_dir() {
-  local msg="$1"
-  local dir="$2"
-  if [ ! -d "$dir" ]; then
-    echo "  [skip] dir missing: $dir"
-    return
-  fi
-  git add "$dir/"
-  if git diff --cached --quiet; then
-    echo "  [skip] nothing new for: $msg"
-    return
-  fi
-  git commit -m "$msg"
-  echo "  ✓ $msg"
-}
-
-echo ""
-echo "================================================================"
-echo "  VedyaAI — Git Commit + Push"
-echo "  Remote: $(git remote get-url origin)"
-echo "================================================================"
-echo ""
-
 # ─────────────────────────────────────────────────────────────────────────────
-# ROOT FILES
+# ROOT CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-echo "▶ Root config files"
-commit "chore: add .env.example with LLM_ENABLED and DATABASE_URL template" \
-  .env.example
+echo "▶ Root config"
+commit "chore: add .env.example (DATABASE_URL, OPENAI_API_KEY, LLM_ENABLED template)" \
+  vedya-ai/.env.example
 
-commit "chore: add docker-compose.yml (postgres+pgvector, api, frontend)" \
-  docker-compose.yml
+commit "chore: add docker-compose.yml — postgres+pgvector, FastAPI, Next.js services" \
+  vedya-ai/docker-compose.yml
 
-commit "docs: add README with quick-start, architecture, milestone gates" \
-  README.md
+commit "docs: add README — quick-start, architecture, milestone gates M3/M4/M5/M6" \
+  vedya-ai/README.md
 
-commit "chore: add git_push_all.sh granular commit script" \
-  git_push_all.sh
+commit "chore: add git_push_all.sh — granular 50+ commit + push script" \
+  vedya-ai/git_push_all.sh
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PHASE 0 — DATA ENRICHMENT
@@ -78,238 +63,285 @@ commit "chore: add git_push_all.sh granular commit script" \
 echo ""
 echo "▶ Phase 0 — Data enrichment"
 
-commit "data: copy raw formulations_bhaishajya.json (178 formulations)" \
-  data/raw/formulations_bhaishajya.json
+commit "data(raw): add formulations_bhaishajya.json — 178 Ayurvedic formulations" \
+  vedya-ai/data/raw/formulations_bhaishajya.json
 
-commit "data: copy raw herbs_amidha.json (360 herbs, full pharmacological props)" \
-  data/raw/herbs_amidha.json
+commit "data(raw): add herbs_amidha.json — 360 herbs with rasa/guna/virya/vipaka/prabhav" \
+  vedya-ai/data/raw/herbs_amidha.json
 
-commit "data(raw): add Charaka Samhita Sutrasthana chapters (142 total)" \
-  "data/raw/Ayurveda/charak-samhita"
+commit "data(raw): add Charaka Samhita Sutrasthana — all 42 chapter JSON files" \
+  "vedya-ai/data/raw/Ayurveda/charak-samhita/1.Sutrasthana (Sutra Sthana) — General Principles"
 
-commit "feat(phase0a): add enrich_formulations.py — derive symptom_tags for all 178 formulations" \
-  scripts/enrich_formulations.py
+commit "data(raw): add Charaka Samhita Nidanasthana — 8 pathology chapters" \
+  "vedya-ai/data/raw/Ayurveda/charak-samhita/2.Nidanasthana (Nidana Sthana) — Section on Pathology"
 
-commit "feat(phase0b): add synonyms.yaml — 38 canonical disease/symptom synonym families" \
-  data/synonyms.yaml
+commit "data(raw): add Charaka Samhita Vimanasthana, Sharirasthana, Indriyasthana" \
+  "vedya-ai/data/raw/Ayurveda/charak-samhita/3.Vimanasthana (Vimana Sthana) — Section on Measure" \
+  "vedya-ai/data/raw/Ayurveda/charak-samhita/4.Sharirasthana (Sarira Sthana) — Section on Physiology" \
+  "vedya-ai/data/raw/Ayurveda/charak-samhita/5.Indriyasthana (Indriya Sthana) — Section on Prognosis"
 
-commit "feat(phase0c): add constraint_rules.yaml — safety rules (Prameha×Asava, Garbhini×purgatives)" \
-  data/constraint_rules.yaml
+commit "data(raw): add Charaka Samhita Cikitsasthana — 30 therapeutics chapters" \
+  "vedya-ai/data/raw/Ayurveda/charak-samhita/6.Cikitsasthana (Cikitsa Sthana) — Section on Therapeutics"
 
-commit "feat(phase0d): add sense_rules.yaml — Abhaya homonym rule (Jatyadi Ghrita context)" \
-  data/sense_rules.yaml
+commit "data(raw): add Charaka Samhita Kalpasthana + Siddhisthana" \
+  "vedya-ai/data/raw/Ayurveda/charak-samhita/7.Kalpasthana (Kalpa Sthana) — Section on Pharmaceutics" \
+  "vedya-ai/data/raw/Ayurveda/charak-samhita/8.Siddhisthana (Siddhi Sthana) — Section on Successful Treatment"
 
-commit "data: add enriched formulations_enriched.json (178/178 tagged, Pinasa discriminator live)" \
-  data/enriched/formulations_enriched.json
+commit "feat(phase0a): enrich_formulations.py — DISEASE_DICT + herb cross-reference → symptom_tags 178/178" \
+  vedya-ai/scripts/enrich_formulations.py
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PHASE 1 — DATABASE SCHEMA
-# ─────────────────────────────────────────────────────────────────────────────
-echo ""
-echo "▶ Phase 1 — Database schema + load scripts"
+commit "feat(phase0b): synonyms.yaml — 38 canonical concepts (Jvara, Kasa, Pinasa, Prameha, Shotha…)" \
+  vedya-ai/data/synonyms.yaml
 
-commit "feat(phase1-schema): add PostgreSQL schema — concepts, terms, dravyas, property_sets" \
-  backend/db/schema.sql
+commit "feat(phase0c): constraint_rules.yaml — CR-01 Prameha×Asava, CR-02 Prameha×Guda, CR-04 Garbhini×purgatives" \
+  vedya-ai/data/constraint_rules.yaml
 
-commit "feat(phase1-schema): schema — kalpanas, yogas, yoga_indications, yoga_ingredients" \
-  backend/db/schema.sql
+commit "feat(phase0d): sense_rules.yaml — Abhaya homonym (Jatyadi Ghrita → Vetiveria zizanioides)" \
+  vedya-ai/data/sense_rules.yaml
 
-commit "feat(phase1-schema): schema — references, verse_embeddings (pgvector 1536)" \
-  backend/db/schema.sql
-
-commit "feat(phase1-schema): schema — constraint_rules, sense_rules, recommendation_traces, yoga_detail view" \
-  backend/db/schema.sql
-
-# Load scripts
-commit "feat(phase1-load): add db_utils.py — shared psycopg2 helpers (upsert_concept, upsert_term)" \
-  scripts/db_utils.py
-
-commit "feat(phase1-load): add load_synonyms.py — load disease/symptom synonym table into concepts+terms" \
-  scripts/load_synonyms.py
-
-commit "feat(phase1-load): add load_herbs.py — load 360 herbs into dravyas + property_sets" \
-  scripts/load_herbs.py
-
-commit "feat(phase1-load): add load_formulations.py — load enriched yogas + indications + ingredients" \
-  scripts/load_formulations.py
-
-commit "feat(phase1-load): add load_constraints.py — load safety constraint rules from YAML" \
-  scripts/load_constraints.py
-
-commit "feat(phase1-load): add load_sense_rules.py — load homonym disambiguation rules" \
-  scripts/load_sense_rules.py
-
-commit "feat(phase1-load): add load_charaka.py — batch load 8215 Charaka verses into references" \
-  scripts/load_charaka.py
-
-commit "feat(phase1-load): add embed_verses.py — OpenAI text-embedding-3-small for pgvector RAG" \
-  scripts/embed_verses.py
-
-commit "feat(phase1-load): add run_all_loaders.sh — master loader script (7 steps in order)" \
-  scripts/run_all_loaders.sh
+commit "data(enriched): add formulations_enriched.json — 178/178 tagged, Pinasa discriminator active" \
+  vedya-ai/data/enriched/formulations_enriched.json
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PHASE 2 — BACKEND PIPELINE
+# PHASE 1 — DATABASE
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "▶ Phase 2 — Backend pipeline"
+echo "▶ Phase 1 — Database schema + loaders"
 
-commit "feat(phase2): add backend/requirements.txt (FastAPI, psycopg2, pydantic, openai)" \
-  backend/requirements.txt
+commit "feat(phase1): schema.sql — concepts + terms ontology tables" \
+  vedya-ai/backend/db/schema.sql
 
-commit "feat(phase2): add Pydantic schemas — VignetteInput, ClinicalFrame, RankFeatures, SafetyViolation" \
-  backend/models/__init__.py backend/models/schemas.py
+commit "feat(phase1): schema.sql — dravyas + property_sets (360 herbs)" \
+  vedya-ai/backend/db/schema.sql
 
-commit "feat(phase2-intake): add pipeline/intake.py — validate + normalize vignette, 3 demo presets" \
-  backend/pipeline/__init__.py backend/pipeline/intake.py
+commit "feat(phase1): schema.sql — kalpanas + yogas + yoga_indications (primary/secondary)" \
+  vedya-ai/backend/db/schema.sql
 
-commit "feat(phase2-understand): add pipeline/understand.py — LLM→ClinicalFrame with graceful fallback" \
-  backend/pipeline/understand.py
+commit "feat(phase1): schema.sql — yoga_ingredients + yoga_references + references" \
+  vedya-ai/backend/db/schema.sql
 
-commit "feat(phase2-resolver): add pipeline/resolver.py — term→concept synonym expansion + sense rules" \
-  backend/pipeline/resolver.py
+commit "feat(phase1): schema.sql — verse_embeddings (pgvector 1536), constraint_rules, sense_rules" \
+  vedya-ai/backend/db/schema.sql
 
-commit "feat(phase2-retriever): add pipeline/retriever.py — SQL candidate retrieval via yoga_indications" \
-  backend/pipeline/retriever.py
+commit "feat(phase1): schema.sql — recommendation_traces audit table + yoga_detail view" \
+  vedya-ai/backend/db/schema.sql
 
-commit "feat(phase2-safety): add pipeline/safety.py — DETERMINISTIC constraint rule engine (HARD_EXCLUDE / WARN)" \
-  backend/pipeline/safety.py
+commit "feat(phase1-load): db_utils.py — shared psycopg2 helpers (upsert_concept, upsert_term)" \
+  vedya-ai/scripts/db_utils.py
 
-commit "feat(phase2-ranker): add pipeline/ranker.py — W1×primary + W2×secondary + W4×citation - W5×penalty" \
-  backend/pipeline/ranker.py
+commit "feat(phase1-load): load_synonyms.py — import 38 canonical disease concepts + synonym terms" \
+  vedya-ai/scripts/load_synonyms.py
 
-commit "feat(phase2-evidence): add pipeline/evidence.py — evidence pack builder (refs + herb properties)" \
-  backend/pipeline/evidence.py
+commit "feat(phase1-load): load_herbs.py — 360 dravyas + property_sets + sanskrit synonyms" \
+  vedya-ai/scripts/load_herbs.py
 
-commit "feat(phase2-explainer): add pipeline/explainer.py — LLM citation-bound + template fallback explainer" \
-  backend/pipeline/explainer.py
+commit "feat(phase1-load): load_formulations.py — 178 yogas + kalpana detection + indications + ingredients" \
+  vedya-ai/scripts/load_formulations.py
 
-commit "feat(phase2-api): add main.py — FastAPI app (POST /recommend, GET /presets, /compare, /health)" \
-  backend/main.py
+commit "feat(phase1-load): load_constraints.py — CR-01…CR-10 safety rules from YAML into postgres" \
+  vedya-ai/scripts/load_constraints.py
 
-commit "feat(phase2-api): add backend Dockerfile (python:3.11-slim, uvicorn)" \
-  backend/Dockerfile
+commit "feat(phase1-load): load_sense_rules.py — Abhaya + 6 other homonym rules into sense_rules table" \
+  vedya-ai/scripts/load_sense_rules.py
+
+commit "feat(phase1-load): load_charaka.py — batch insert 8215 Charaka verses from 142 chapter JSONs" \
+  vedya-ai/scripts/load_charaka.py
+
+commit "feat(phase1-load): embed_verses.py — OpenAI text-embedding-3-small → pgvector verse_embeddings" \
+  vedya-ai/scripts/embed_verses.py
+
+commit "feat(phase1-load): run_all_loaders.sh — master 7-step loader script with ordering" \
+  vedya-ai/scripts/run_all_loaders.sh
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PHASE 2 — EVAL HARNESS
+# PHASE 2 — BACKEND
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "▶ Phase 2 — FastAPI backend pipeline"
+
+commit "feat(phase2): backend/requirements.txt — FastAPI, psycopg2, pydantic, openai, uvicorn" \
+  vedya-ai/backend/requirements.txt
+
+commit "feat(phase2): models/schemas.py — VignetteInput, ClinicalFrame, RankFeatures, SafetyViolation, RecommendationResponse" \
+  vedya-ai/backend/models/__init__.py \
+  vedya-ai/backend/models/schemas.py
+
+commit "feat(phase2-intake): pipeline/intake.py — normalize vignette + 3 demo presets (Pinasa, Shotha, Prameha)" \
+  vedya-ai/backend/pipeline/__init__.py \
+  vedya-ai/backend/pipeline/intake.py
+
+commit "feat(phase2-understand): pipeline/understand.py — LLM→ClinicalFrame with structured fallback" \
+  vedya-ai/backend/pipeline/understand.py
+
+commit "feat(phase2-resolver): pipeline/resolver.py — term→concept expansion + sense rule disambiguation" \
+  vedya-ai/backend/pipeline/resolver.py
+
+commit "feat(phase2-retriever): pipeline/retriever.py — SQL yoga_indications candidate retrieval with ingredient data" \
+  vedya-ai/backend/pipeline/retriever.py
+
+commit "feat(phase2-safety): pipeline/safety.py — DETERMINISTIC constraint engine (HARD_EXCLUDE / WARN, no LLM)" \
+  vedya-ai/backend/pipeline/safety.py
+
+commit "feat(phase2-ranker): pipeline/ranker.py — W1=3×primary + W2=1×secondary − W5=5×penalty (M3 gate live)" \
+  vedya-ai/backend/pipeline/ranker.py
+
+commit "feat(phase2-evidence): pipeline/evidence.py — evidence pack builder with herb property aggregation" \
+  vedya-ai/backend/pipeline/evidence.py
+
+commit "feat(phase2-explainer): pipeline/explainer.py — citation-bound LLM explanation + template fallback" \
+  vedya-ai/backend/pipeline/explainer.py
+
+commit "feat(phase2-api): main.py — FastAPI lifespan, POST /recommend, GET /presets, POST /compare, GET /health" \
+  vedya-ai/backend/main.py
+
+commit "feat(phase2-api): backend Dockerfile — python:3.11-slim, uvicorn ASGI server" \
+  vedya-ai/backend/Dockerfile
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PHASE 2 — EVAL
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "▶ Phase 2 — Eval harness"
 
-commit "feat(phase2-eval): add eval/__init__.py" \
-  backend/eval/__init__.py
+commit "feat(phase2-eval): golden_vignettes.json — 27 cases (pairwise, safety, synonym, recall, citation)" \
+  vedya-ai/backend/eval/__init__.py \
+  vedya-ai/backend/eval/golden_vignettes.json
 
-commit "feat(phase2-eval): add golden_vignettes.json — 27 test cases (pairwise, safety, synonym, citation)" \
-  backend/eval/golden_vignettes.json
+commit "feat(phase2-eval): GV-01/02 pairwise — Pinasa→Vyaghryadi, Shotha→Punarnavadi discrimination" \
+  vedya-ai/backend/eval/golden_vignettes.json
 
-commit "feat(phase2-eval): add GV-01 Pinasa discrimination — Vyaghryadi > Punarnavadi" \
-  backend/eval/golden_vignettes.json
+commit "feat(phase2-eval): GV-03/04 safety gates — Prameha×Asava CR-01, Garbhini×purgatives CR-04" \
+  vedya-ai/backend/eval/golden_vignettes.json
 
-commit "feat(phase2-eval): add GV-03/04 safety gates — Prameha×Asava (CR-01), Garbhini×purgatives (CR-04)" \
-  backend/eval/golden_vignettes.json
+commit "feat(phase2-eval): GV-05/06 synonym retrieval — Santapa→Jvara, Pratishyaya→Pinasa" \
+  vedya-ai/backend/eval/golden_vignettes.json
 
-commit "feat(phase2-eval): add GV-05/06 synonym resolution — Santapa→Jvara, Pratishyaya→Pinasa" \
-  backend/eval/golden_vignettes.json
+commit "feat(phase2-eval): GV-17 wound healing — Jatyadi Ghrita in recall; GV-27 citation validity" \
+  vedya-ai/backend/eval/golden_vignettes.json
 
-commit "feat(phase2-eval): add run_eval.py — M3/M4/M5 gate harness with --gate flag and verbose output" \
-  backend/eval/run_eval.py
+commit "feat(phase2-eval): run_eval.py — M3/M4/M5 gate harness, --gate flag, pairwise + safety + recall checks" \
+  vedya-ai/backend/eval/run_eval.py
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PHASE 3 — FRONTEND
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "▶ Phase 3 — Frontend (Next.js)"
+echo "▶ Phase 3 — Next.js frontend"
 
-commit "feat(phase3-tokens): add styles/tokens.css — §17.10 VedyaAI design tokens (shila/ink/harita/agni/kesar/tamra)" \
-  frontend/src/styles/tokens.css
+commit "feat(phase3-tokens): tokens.css — §17.10 exact: shila/ink/harita/agni/kesar/tamra + font vars" \
+  vedya-ai/frontend/src/styles/tokens.css
 
-commit "feat(phase3-layout): add globals.css + root layout with DisclaimerBar" \
-  frontend/src/app/globals.css frontend/src/app/layout.tsx
+commit "feat(phase3-layout): globals.css (import tokens) + layout.tsx (DisclaimerBar in root)" \
+  vedya-ai/frontend/src/app/globals.css \
+  vedya-ai/frontend/src/app/layout.tsx
 
-commit "feat(phase3-api): add lib/api.ts — typed API client for all backend endpoints" \
-  frontend/src/lib/api.ts
+commit "feat(phase3-api): lib/api.ts — typed API client (recommend, presets, compare, formulation, synonymMap)" \
+  vedya-ai/frontend/src/lib/api.ts
 
-commit "feat(phase3-ui): add DisclaimerBar component — always-visible educational disclaimer" \
-  frontend/src/components/DisclaimerBar.tsx
+commit "feat(phase3-ui): DisclaimerBar — always-visible educational disclaimer in footer" \
+  vedya-ai/frontend/src/components/DisclaimerBar.tsx
 
-commit "feat(phase3-ui): add PrimaryButton component — harita CTA + outline variant" \
-  frontend/src/components/PrimaryButton.tsx
+commit "feat(phase3-ui): PrimaryButton — harita CTA + outline variant, accessible focus ring" \
+  vedya-ai/frontend/src/components/PrimaryButton.tsx
 
-commit "feat(phase3-ui): add SafetyDot component — agni/kesar/harita semantic safety indicator" \
-  frontend/src/components/SafetyDot.tsx
+commit "feat(phase3-ui): SafetyDot — semantic agni/kesar/harita dot (hard/warn/safe)" \
+  vedya-ai/frontend/src/components/SafetyDot.tsx
 
-commit "feat(phase3-ui): add SafetyPanel component — agni-wash panel for HARD_EXCLUDE + WARN violations" \
-  frontend/src/components/SafetyPanel.tsx
+commit "feat(phase3-ui): SafetyPanel — agni-wash panel with HARD_EXCLUDE + WARN violation display" \
+  vedya-ai/frontend/src/components/SafetyPanel.tsx
 
-commit "feat(phase3-ui): add TermChip component — resolved (harita) + unresolved (kesar) term tags" \
-  frontend/src/components/TermChip.tsx
+commit "feat(phase3-ui): TermChip — resolved (harita) + unresolved (kesar) with canonical display" \
+  vedya-ai/frontend/src/components/TermChip.tsx
 
-commit "feat(phase3-ui): add CaseChip component — sticky vignette summary with comorbidity badges" \
-  frontend/src/components/CaseChip.tsx
+commit "feat(phase3-ui): CaseChip — sticky vignette summary + comorbidity badges" \
+  vedya-ai/frontend/src/components/CaseChip.tsx
 
-commit "feat(phase3-ui): add CoverageNote component — honest corpus gap indicator" \
-  frontend/src/components/CoverageNote.tsx
+commit "feat(phase3-ui): CoverageNote — honest dashed-border corpus gap indicator" \
+  vedya-ai/frontend/src/components/CoverageNote.tsx
 
-commit "feat(phase3-ui): add CitationCard component — tamra-accented classical reference display" \
-  frontend/src/components/CitationCard.tsx
+commit "feat(phase3-ui): CitationCard — tamra-accented classical reference with excerpt" \
+  vedya-ai/frontend/src/components/CitationCard.tsx
 
-commit "feat(phase3-ui): add RankRow component — score bar + compare toggle + safety dot" \
-  frontend/src/components/RankRow.tsx
+commit "feat(phase3-ui): RankRow — score bar + compare toggle + safety dot + hard-excluded dim" \
+  vedya-ai/frontend/src/components/RankRow.tsx
 
-commit "feat(phase3-ui): add CompareTable component — feature-aligned discrimination comparison" \
-  frontend/src/components/CompareTable.tsx
+commit "feat(phase3-ui): CompareTable — feature-aligned rows (primary, secondary, safety, score, citations)" \
+  vedya-ai/frontend/src/components/CompareTable.tsx
 
-commit "feat(phase3-screen): add Home/Demo page — VedyaAI wordmark, mineral hero, 3 preset tiles" \
-  frontend/src/app/page.tsx
+commit "feat(phase3-screen): Home page — dark mineral hero, Fraunces wordmark, 3 preset tiles, quick input" \
+  vedya-ai/frontend/src/app/page.tsx
 
-commit "feat(phase3-screen): add Results page — Safety→TopPick→CompareTeaser→RankList order" \
-  frontend/src/app/results/page.tsx
+commit "feat(phase3-screen): Results page — SafetyPanel→TopPick→CompareTeaser→RankList + IntakePanel" \
+  vedya-ai/frontend/src/app/results/page.tsx
 
-commit "feat(phase3-screen): add Results/IntakePanel — free-text + symptom chips + comorbidity toggles" \
-  frontend/src/app/results/page.tsx
+commit "feat(phase3-screen): Compare page — A|B discrimination, winner harita highlight, features table" \
+  vedya-ai/frontend/src/app/compare/page.tsx
 
-commit "feat(phase3-screen): add Compare page — A|B discrimination with CompareTable + winner highlight" \
-  frontend/src/app/compare/page.tsx
+commit "feat(phase3-screen): Detail page — PropertyGrid null→Not in corpus, ambiguity notes, CitationCards" \
+  "vedya-ai/frontend/src/app/detail/[id]/page.tsx"
 
-commit "feat(phase3-screen): add Detail page — PropertyGrid (null→Not in corpus), CitationCards, ambiguity notes" \
-  "frontend/src/app/detail/[id]/page.tsx"
+commit "feat(phase3-screen): Learn page — synonym map search, teaching point, quick-links palette" \
+  vedya-ai/frontend/src/app/learn/page.tsx
 
-commit "feat(phase3-screen): add Learn page — synonym map, quick-links (Jvara/Kasa/Pinasa/Shotha/Prameha)" \
-  frontend/src/app/learn/page.tsx
+commit "feat(phase3): frontend Dockerfile — node:20-alpine multi-stage, standalone Next.js build" \
+  vedya-ai/frontend/Dockerfile
 
-commit "feat(phase3): add frontend Dockerfile (node:20 multi-stage, standalone output)" \
-  frontend/Dockerfile
+commit "chore(frontend): next.config.ts, package.json, tsconfig, postcss, eslint" \
+  vedya-ai/frontend/next.config.ts \
+  vedya-ai/frontend/package.json \
+  vedya-ai/frontend/tsconfig.json \
+  vedya-ai/frontend/postcss.config.mjs \
+  vedya-ai/frontend/eslint.config.mjs
+
+commit "chore(frontend): package-lock.json lockfile" \
+  vedya-ai/frontend/package-lock.json
+
+commit "chore(frontend): public assets (SVG icons)" \
+  vedya-ai/frontend/public
+
+commit "chore(frontend): .gitignore, AGENTS.md, CLAUDE.md" \
+  vedya-ai/frontend/.gitignore \
+  vedya-ai/frontend/AGENTS.md \
+  vedya-ai/frontend/CLAUDE.md \
+  vedya-ai/frontend/README.md
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PHASE 4 — INTEGRATION
+# PHASE 4 — INTEGRATION / FALLBACKS
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo "▶ Phase 4 — Integration + precomputed fallbacks"
 
-commit "feat(phase4): add precomputed/pinasa_urti.json — golden fallback (Vyaghryadi #1, Pinasa demo)" \
-  backend/precomputed/pinasa_urti.json
+commit "feat(phase4): precomputed/pinasa_urti.json — Vyaghryadi #1, Pinasa demo golden response" \
+  vedya-ai/backend/precomputed/pinasa_urti.json
 
-commit "feat(phase4): add precomputed/inflammatory_shotha.json — golden fallback (Punarnavadi #1, Shotha demo)" \
-  backend/precomputed/inflammatory_shotha.json
+commit "feat(phase4): precomputed/inflammatory_shotha.json — Punarnavadi #1, Shotha demo (reverse discriminator)" \
+  vedya-ai/backend/precomputed/inflammatory_shotha.json
 
-commit "feat(phase4): add precomputed/diabetic_respiratory.json — golden fallback (safety gates: CR-01, CR-02)" \
-  backend/precomputed/diabetic_respiratory.json
+commit "feat(phase4): precomputed/diabetic_respiratory.json — safety gates CR-01/CR-02 demo response" \
+  vedya-ai/backend/precomputed/diabetic_respiratory.json
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ANY REMAINING UNTRACKED FILES
+# CATCH ALL REMAINING
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
-echo "▶ Sweeping remaining untracked files"
+echo "▶ Final sweep — remaining files"
 
-# Frontend package files
-commit "chore(frontend): add package.json, tsconfig, postcss, eslint config" \
-  frontend/package.json frontend/tsconfig.json frontend/postcss.config.mjs frontend/eslint.config.mjs
+# Exclude nested git repos and cache dirs
+git add \
+  vedya-ai/ \
+  --ignore-errors 2>/dev/null || true
 
-# Catch any remaining
-git add -A
+# Remove pycache and other noise from staging
+git restore --staged \
+  "vedya-ai/backend/__pycache__" \
+  "vedya-ai/backend/models/__pycache__" \
+  "vedya-ai/backend/pipeline/__pycache__" \
+  "vedya-ai/scripts/__pycache__" \
+  2>/dev/null || true
+
 if ! git diff --cached --quiet; then
-  git commit -m "chore: add remaining project files (package-lock, public assets, pyc cache cleanup)"
-  echo "  ✓ remaining files"
+  git commit -m "chore: sweep remaining project files (favicon, lock files, misc config)"
+  echo "  ✓ swept remaining files"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -321,9 +353,13 @@ git push origin main
 
 echo ""
 echo "================================================================"
-echo "  ✓ All commits pushed to $(git remote get-url origin)"
-COMMIT_COUNT=$(git rev-list HEAD --count)
-echo "  Total commits on branch: $COMMIT_COUNT"
+TOTAL=$(git rev-list HEAD --count)
+NEW=$(git log --oneline origin/main@{1}..HEAD 2>/dev/null | wc -l || echo "many")
+echo "  ✓ Push complete!"
+echo "  Remote: $(git remote get-url origin)"
+echo "  Total commits on branch : $TOTAL"
+echo "  New commits this run    : $NEW"
+echo ""
 echo "  Recent commits:"
-git log --oneline -15
+git log --oneline -20
 echo "================================================================"
