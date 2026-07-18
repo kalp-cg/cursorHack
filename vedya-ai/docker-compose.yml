@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: vedyapass
       POSTGRES_DB: vedyaai
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - vedya_pgdata:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql

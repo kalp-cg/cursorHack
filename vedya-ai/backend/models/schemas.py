@@ -17,6 +17,10 @@ class VignetteInput(BaseModel):
     prakriti: Optional[str] = Field(None, description="Soft Prakriti hint: Vata/Pitta/Kapha")
     kalpana_filter: Optional[str] = Field(None, description="Prefer specific kalpana type")
     top_k: int = Field(10, ge=1, le=50)
+    # Continuity + locale (optional)
+    conversation_id: Optional[str] = Field(None, description="Existing conversation for follow-ups")
+    locale: Optional[str] = Field("en", description="UI/response locale: en|hi|gu")
+    follow_up: bool = Field(False, description="True when this is a follow-up question")
 
 
 class PresetVignette(BaseModel):
@@ -189,6 +193,7 @@ class RecommendationResponse(BaseModel):
     corpus_version: str = "1.0.0"
     llm_used: bool = False
     coverage_note: Optional[str] = None
+    conversation_id: Optional[str] = None
     disclaimer: str = (
         "Educational decision support only. "
         "Not a diagnosis or prescription. "

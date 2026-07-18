@@ -15,10 +15,13 @@ import CaseChip from "@/components/CaseChip";
 import TermChip from "@/components/TermChip";
 import PrimaryButton from "@/components/PrimaryButton";
 import CitationCard from "@/components/CitationCard";
+import { useApp } from "@/lib/app-context";
+import Link from "next/link";
 
 const COMORBIDITIES = ["Diabetes", "Pregnancy", "Amlapitta (Hyperacidity)", "Raktapitta (Bleeding)"];
 
 function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
+  const { t } = useApp();
   const [freeText, setFreeText] = useState("");
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [symptomInput, setSymptomInput] = useState("");
@@ -49,20 +52,19 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
         className="text-3xl font-medium mb-2"
         style={{ fontFamily: "var(--font-display)", color: "var(--veda-ink)" }}
       >
-        New Case
+        {t("newCase")}
       </h1>
       <p className="text-sm mb-8" style={{ color: "var(--veda-ink-soft)" }}>
-        Enter symptoms or a clinical vignette to rank suitable formulations.
+        {t("newCaseHint")}
       </p>
 
-      {/* Free text */}
       <label className="block text-sm font-medium mb-1" style={{ color: "var(--veda-ink)" }}>
-        Clinical vignette (free text)
+        {t("vignetteLabel")}
       </label>
       <textarea
         value={freeText}
         onChange={(e) => setFreeText(e.target.value)}
-        placeholder="e.g. Patient with fever, cough, and runny nose for 3 days. No known comorbidities."
+        placeholder={t("vignettePlaceholder")}
         rows={3}
         className="w-full rounded-xl px-4 py-3 text-sm mb-6 resize-none outline-none"
         style={{
@@ -73,9 +75,8 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
         }}
       />
 
-      {/* Symptom tags */}
       <label className="block text-sm font-medium mb-1" style={{ color: "var(--veda-ink)" }}>
-        Symptoms / Rogas
+        {t("symptomsLabel")}
       </label>
       <div className="flex gap-2 mb-2">
         <input
@@ -83,21 +84,12 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
           value={symptomInput}
           onChange={(e) => setSymptomInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addSymptom()}
-          placeholder="e.g. Jvara, Cough, Pinasa…"
-          className="flex-1 rounded-xl px-4 py-2 text-sm outline-none"
-          style={{
-            background: "var(--veda-shila-deep)",
-            border: "1px solid var(--veda-fog)",
-            color: "var(--veda-ink)",
-          }}
+          placeholder={t("placeholder")}
+          className="flex-1 rounded-xl px-4 py-2 text-sm outline-none veda-input"
         />
-        <button
-          onClick={addSymptom}
-          className="px-4 py-2 rounded-xl text-sm font-medium"
-          style={{ background: "var(--veda-harita)", color: "white" }}
-        >
-          Add
-        </button>
+        <PrimaryButton size="sm" onClick={addSymptom}>
+          +
+        </PrimaryButton>
       </div>
       <div className="flex flex-wrap gap-2 mb-6">
         {symptoms.map((s) => (
@@ -109,9 +101,8 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
         ))}
       </div>
 
-      {/* Comorbidities */}
       <label className="block text-sm font-medium mb-2" style={{ color: "var(--veda-ink)" }}>
-        Comorbidities
+        {t("comorbiditiesLabel")}
       </label>
       <div className="flex flex-wrap gap-3 mb-8">
         {COMORBIDITIES.map((c) => {
@@ -119,6 +110,7 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
           return (
             <button
               key={c}
+              type="button"
               onClick={() =>
                 setSelectedComorbs((prev) =>
                   selected ? prev.filter((x) => x !== c) : [...prev, c]
@@ -143,7 +135,7 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
         disabled={running || (!freeText.trim() && symptoms.length === 0)}
         className="w-full"
       >
-        {running ? "Ranking formulations…" : "Rank Formulations"}
+        {running ? t("rankingFormulations") : t("submitCase")}
       </PrimaryButton>
     </div>
   );
@@ -152,11 +144,14 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
 function ResultsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t, user, locale, conversationId, setConversationId } = useApp();
   const [response, setResponse] = useState<RecommendationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [showIntake, setShowIntake] = useState(false);
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null);
+  const [followUp, setFollowUp] = useState("");
+  const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("intake") === "true") {
@@ -166,15 +161,18 @@ function ResultsContent() {
     }
     const stored = sessionStorage.getItem("vedya_results");
     if (stored) {
-      setResponse(JSON.parse(stored));
+      const parsed = JSON.parse(stored) as RecommendationResponse;
+      setResponse(parsed);
+      if (parsed.conversation_id) setConversationId(parsed.conversation_id);
     }
     setLoading(false);
-  }, [searchParams]);
+  }, [searchParams, setConversationId]);
 
   const handleIntakeSubmit = useCallback(async (inp: VignetteInput) => {
     setLoading(true);
     try {
-      const result = await api.recommend(inp);
+      const result = await api.recommend({ ...inp, locale });
+      if (result.conversation_id) setConversationId(result.conversation_id);
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       setResponse(result);
       setShowIntake(false);
@@ -183,7 +181,32 @@ function ResultsContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale, setConversationId]);
+
+  async function askFollowUp() {
+    if (!followUp.trim() || !user) return;
+    setAsking(true);
+    try {
+      const result = await api.recommend({
+        free_text: followUp.trim(),
+        symptoms: [],
+        rogas: [],
+        comorbidities: [],
+        top_k: 10,
+        locale,
+        conversation_id: conversationId || response?.conversation_id || undefined,
+        follow_up: true,
+      });
+      if (result.conversation_id) setConversationId(result.conversation_id);
+      sessionStorage.setItem("vedya_results", JSON.stringify(result));
+      setResponse(result);
+      setFollowUp("");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAsking(false);
+    }
+  }
 
   function toggleCompare(yogaId: string) {
     setSelectedForCompare((prev) => {
@@ -202,7 +225,7 @@ function ResultsContent() {
       <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--veda-shila)" }}>
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3" style={{ borderColor: "var(--veda-harita)" }} />
-          <p style={{ color: "var(--veda-ink-soft)", fontFamily: "var(--font-ui)" }}>Ranking formulations…</p>
+          <p style={{ color: "var(--veda-ink-soft)", fontFamily: "var(--font-ui)" }}>{t("rankingFormulations")}</p>
         </div>
       </div>
     );
@@ -211,8 +234,8 @@ function ResultsContent() {
   if (!response) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen" style={{ background: "var(--veda-shila)" }}>
-        <p style={{ color: "var(--veda-ink-soft)" }}>No results yet.</p>
-        <PrimaryButton className="mt-4" onClick={() => router.push("/")}>Go Home</PrimaryButton>
+        <p style={{ color: "var(--veda-ink-soft)" }}>{t("noResults")}</p>
+        <PrimaryButton className="mt-4" onClick={() => router.push("/")}>{t("goHome")}</PrimaryButton>
       </div>
     );
   }
@@ -232,7 +255,7 @@ function ResultsContent() {
         <div className="flex-1">
           <CaseChip
             summary={response.vignette_summary}
-            comorbidities={response.results[0]?.safety_violations.length ? ["Constraints active"] : []}
+            comorbidities={response.results[0]?.safety_violations.length ? [t("constraintsActive")] : []}
             onReset={() => router.push("/")}
           />
         </div>
@@ -241,7 +264,7 @@ function ResultsContent() {
             size="sm"
             onClick={() => router.push(`/compare?a=${selectedForCompare[0]}&b=${selectedForCompare[1]}`)}
           >
-            Compare Selected →
+            {t("compareSelected")} →
           </PrimaryButton>
         )}
       </div>
@@ -269,13 +292,13 @@ function ResultsContent() {
             style={{ background: "var(--veda-surface)", border: "1px solid var(--veda-harita-soft)" }}
           >
             <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--veda-harita)" }}>
-              Top Recommendation
+              {t("topRecommendation")}
             </div>
             <div className="text-2xl font-medium mb-1" style={{ fontFamily: "var(--font-display)", color: "var(--veda-ink)" }}>
               {topResult.yoga_name}
             </div>
             <div className="text-sm mb-3" style={{ color: "var(--veda-ink-soft)" }}>
-              {topResult.kalpana} · Fit Score: {topResult.score.toFixed(1)}
+              {topResult.kalpana} · {t("fitScore")}: {topResult.score.toFixed(1)}
             </div>
             {topResult.explanation && (
               <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--veda-ink)" }}>
@@ -300,7 +323,7 @@ function ResultsContent() {
             style={{ background: "var(--veda-harita-soft)", border: "1px solid var(--veda-harita)" }}
           >
             <span className="text-sm font-medium" style={{ color: "var(--veda-harita)" }}>
-              Why {activeResults[0]?.yoga_name} over {activeResults[1]?.yoga_name}?
+              {t("whyOver", { a: activeResults[0]?.yoga_name || "", b: activeResults[1]?.yoga_name || "" })}
             </span>
             <PrimaryButton
               size="sm"
@@ -308,7 +331,7 @@ function ResultsContent() {
                 router.push(`/compare?a=${activeResults[0].yoga_id}&b=${activeResults[1].yoga_id}`)
               }
             >
-              Compare →
+              {t("compare")} →
             </PrimaryButton>
           </div>
         )}
@@ -346,17 +369,48 @@ function ResultsContent() {
               className="text-sm underline"
               style={{ color: "var(--veda-tamra)" }}
             >
-              Learn synonyms & terminology →
+              {t("learnSynonyms")} →
             </button>
           </div>
         )}
 
+        {/* Follow-up conversation */}
+        <div
+          className="mt-8 rounded-2xl p-5"
+          style={{ background: "var(--veda-surface)", border: "1px solid var(--veda-fog)" }}
+        >
+          <h3 className="text-lg font-medium mb-1" style={{ fontFamily: "var(--font-display)", color: "var(--veda-ink)" }}>
+            {t("followUpTitle")}
+          </h3>
+          <p className="text-sm mb-3" style={{ color: "var(--veda-ink-soft)" }}>
+            {user ? t("followUpHint") : t("loginToContinue")}
+          </p>
+          {user ? (
+            <div className="flex gap-2">
+              <input
+                className="veda-input flex-1"
+                value={followUp}
+                onChange={(e) => setFollowUp(e.target.value)}
+                placeholder={t("followUpPlaceholder")}
+                onKeyDown={(e) => e.key === "Enter" && askFollowUp()}
+              />
+              <PrimaryButton onClick={askFollowUp} disabled={asking || !followUp.trim()}>
+                {asking ? t("running") : t("askFollowUp")}
+              </PrimaryButton>
+            </div>
+          ) : (
+            <Link href="/login" style={{ color: "var(--veda-harita)", fontSize: "0.9rem" }}>
+              {t("login")} →
+            </Link>
+          )}
+        </div>
+
         {/* Stats */}
         <div className="mt-8 grid grid-cols-3 gap-4 text-center">
           {[
-            { label: "Candidates", value: response.total_candidates },
-            { label: "Excluded", value: response.excluded_count },
-            { label: "Warned", value: response.warned_count },
+            { label: t("candidates"), value: response.total_candidates },
+            { label: t("excluded"), value: response.excluded_count },
+            { label: t("warned"), value: response.warned_count },
           ].map((stat) => (
             <div
               key={stat.label}

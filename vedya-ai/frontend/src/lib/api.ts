@@ -10,6 +10,9 @@ export interface VignetteInput {
   prakriti?: string;
   kalpana_filter?: string;
   top_k?: number;
+  conversation_id?: string;
+  locale?: string;
+  follow_up?: boolean;
 }
 
 export interface RankFeatures {
@@ -100,6 +103,7 @@ export interface RecommendationResponse {
   corpus_version: string;
   llm_used: boolean;
   coverage_note?: string;
+  conversation_id?: string | null;
   disclaimer: string;
 }
 
@@ -168,10 +172,35 @@ export interface FormulationDetail {
   references: ReferenceCard[];
 }
 
+export interface AuthUser {
+  user_id: string;
+  email: string;
+  display_name?: string | null;
+  preferred_locale: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+function authHeaders(): HeadersInit {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" };
+  const token = localStorage.getItem("vedya_token");
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: {
+      ...authHeaders(),
+      ...(options?.headers || {}),
+    },
   });
   if (!res.ok) {
     const err = await res.text();
@@ -208,4 +237,23 @@ export const api = {
 
   health: () =>
     apiFetch<{ status: string; db_connected: boolean; llm_enabled: boolean; corpus_version: string; formulation_count: number }>("/health"),
+
+  signup: (body: { email: string; password: string; display_name?: string; preferred_locale?: string }) =>
+    apiFetch<AuthResponse>("/auth/signup", { method: "POST", body: JSON.stringify(body) }),
+
+  login: (body: { email: string; password: string }) =>
+    apiFetch<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
+
+  me: () => apiFetch<AuthUser>("/auth/me"),
+
+  listConversations: () =>
+    apiFetch<Array<{ conversation_id: string; title: string; locale: string; updated_at?: string }>>(
+      "/conversations"
+    ),
+
+  getConversation: (id: string) =>
+    apiFetch<{
+      conversation: { conversation_id: string; title: string };
+      messages: Array<{ role: string; content_text: string; payload?: RecommendationResponse }>;
+    }>(`/conversations/${id}`),
 };

@@ -11,6 +11,7 @@ export default function PrimaryButton({
   size = "md",
   children,
   className = "",
+  type = "button",
   ...props
 }: Props) {
   const classes = [
@@ -23,7 +24,7 @@ export default function PrimaryButton({
     .join(" ");
 
   return (
-    <button className={classes} type="button" {...props}>
+    <button className={classes} type={type} {...props}>
       {children}
     </button>
   );

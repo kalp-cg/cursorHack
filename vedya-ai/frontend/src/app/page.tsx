@@ -3,15 +3,20 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, PresetVignette } from "@/lib/api";
 import PrimaryButton from "@/components/PrimaryButton";
+import { useApp } from "@/lib/app-context";
 
 function PresetCard({
   preset,
   onRun,
   loading,
+  openLabel,
+  runningLabel,
 }: {
   preset: PresetVignette;
   onRun: () => void;
   loading: boolean;
+  openLabel: string;
+  runningLabel: string;
 }) {
   return (
     <article
@@ -34,7 +39,7 @@ function PresetCard({
           }}
           disabled={loading}
         >
-          {loading ? "Running…" : "Open Preset"}
+          {loading ? runningLabel : openLabel}
         </PrimaryButton>
       </div>
     </article>
@@ -43,6 +48,7 @@ function PresetCard({
 
 export default function HomePage() {
   const router = useRouter();
+  const { t, locale, setConversationId } = useApp();
   const [presets, setPresets] = useState<PresetVignette[]>([]);
   const [loadingPreset, setLoadingPreset] = useState<string | null>(null);
   const [freeText, setFreeText] = useState("");
@@ -56,6 +62,7 @@ export default function HomePage() {
     setLoadingPreset(presetId);
     try {
       const result = await api.runPreset(presetId);
+      if (result.conversation_id) setConversationId(result.conversation_id);
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       router.push("/results");
     } catch (e) {
@@ -75,7 +82,9 @@ export default function HomePage() {
         rogas: [],
         comorbidities: [],
         top_k: 10,
+        locale,
       });
+      if (result.conversation_id) setConversationId(result.conversation_id);
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       router.push("/results");
     } catch (e) {
@@ -90,12 +99,9 @@ export default function HomePage() {
       <section className="veda-hero">
         <div className="veda-hero-texture" aria-hidden />
         <div className="veda-hero-inner">
-          <h1 className="veda-brand">VedyaAI</h1>
-          <p className="veda-tagline">Classical Ayurvedic Formulation Discriminator</p>
-          <p className="veda-lede">
-            Rank formulations with comparative explanations, classical citations, and safety
-            gates. Not a diagnosis. Not a prescription. A decision support companion.
-          </p>
+          <h1 className="veda-brand">{t("brand")}</h1>
+          <p className="veda-tagline">{t("tagline")}</p>
+          <p className="veda-lede">{t("lede")}</p>
 
           <div className="veda-search-row">
             <input
@@ -103,21 +109,21 @@ export default function HomePage() {
               className="veda-input"
               value={freeText}
               onChange={(e) => setFreeText(e.target.value)}
-              placeholder="Fever, cough, common cold…"
+              placeholder={t("placeholder")}
               onKeyDown={(e) => e.key === "Enter" && runFreeText()}
-              aria-label="Clinical vignette"
+              aria-label={t("clinicalVignetteAria")}
             />
             <PrimaryButton onClick={runFreeText} disabled={running || !freeText.trim()}>
-              {running ? "Ranking…" : "Rank"}
+              {running ? t("ranking") : t("rank")}
             </PrimaryButton>
           </div>
 
-          <p className="veda-hint">Or choose a preset clinical vignette below</p>
+          <p className="veda-hint">{t("orPreset")}</p>
         </div>
       </section>
 
       <section className="veda-section">
-        <h2 className="veda-section-title">Demo Vignettes</h2>
+        <h2 className="veda-section-title">{t("demoVignettes")}</h2>
 
         {presets.length === 0 ? (
           <div className="veda-preset-grid">
@@ -133,6 +139,8 @@ export default function HomePage() {
                 preset={p}
                 onRun={() => runPreset(p.id)}
                 loading={loadingPreset === p.id}
+                openLabel={t("openPreset")}
+                runningLabel={t("running")}
               />
             ))}
           </div>
@@ -144,7 +152,7 @@ export default function HomePage() {
             size="lg"
             onClick={() => router.push("/results?intake=true")}
           >
-            New Case
+            {t("newCase")}
           </PrimaryButton>
         </div>
       </section>

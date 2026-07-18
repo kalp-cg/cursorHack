@@ -131,25 +131,45 @@ button, input, textarea {
   }
 }
 
+/* Light-theme form control (login, signup, follow-up, topbar) */
 .veda-input {
   flex: 1;
   min-width: 0;
+  width: 100%;
   padding: 0.85rem 1.1rem;
   border-radius: var(--veda-radius);
-  border: 1px solid rgba(247, 249, 248, 0.22);
-  background: rgba(247, 249, 248, 0.1);
-  color: #F7F9F8;
+  border: 1px solid var(--veda-fog);
+  background: var(--veda-surface);
+  color: var(--veda-ink);
   font-size: 0.95rem;
   outline: none;
 }
 
 .veda-input::placeholder {
-  color: rgba(247, 249, 248, 0.4);
+  color: var(--veda-fog);
 }
 
 .veda-input:focus {
+  border-color: var(--veda-harita);
+  background: #fff;
+  box-shadow: 0 0 0 3px var(--veda-harita-soft);
+}
+
+/* Dark hero search keeps translucent styling */
+.veda-hero .veda-input {
+  border: 1px solid rgba(247, 249, 248, 0.22);
+  background: rgba(247, 249, 248, 0.1);
+  color: #F7F9F8;
+}
+
+.veda-hero .veda-input::placeholder {
+  color: rgba(247, 249, 248, 0.4);
+}
+
+.veda-hero .veda-input:focus {
   border-color: rgba(216, 237, 228, 0.55);
   background: rgba(247, 249, 248, 0.14);
+  box-shadow: none;
 }
 
 .veda-hint {
@@ -295,4 +315,164 @@ button, input, textarea {
 @keyframes veda-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
+}
+
+/* ── Top bar / auth chrome ── */
+.veda-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid var(--veda-fog);
+  background: var(--veda-surface);
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.veda-topbar-brand {
+  color: var(--veda-ink);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.veda-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.veda-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--veda-fog);
+  border-radius: 10px;
+  padding: 0.4rem 2rem 0.4rem 0.7rem;
+  background-color: var(--veda-shila);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%233A474E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  color: var(--veda-ink);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  cursor: pointer;
+  min-width: 7.5rem;
+}
+
+.veda-select:focus {
+  border-color: var(--veda-harita);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--veda-harita-soft);
+}
+
+.veda-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.85rem;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  background: transparent;
+  color: var(--veda-ink);
+}
+
+.veda-link-btn:hover {
+  background: var(--veda-shila-deep);
+}
+
+.veda-link-btn-primary {
+  background: var(--veda-harita);
+  color: #fff;
+  border-color: var(--veda-harita);
+}
+
+.veda-link-btn-primary:hover {
+  background: #164c3c;
+  color: #fff;
+}
+
+.veda-link-btn-ghost {
+  border-color: var(--veda-fog);
+  color: var(--veda-ink);
+}
+
+.veda-auth-shell {
+  min-height: calc(100vh - 7rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background: var(--veda-shila);
+}
+
+.veda-auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--veda-surface);
+  border: 1px solid var(--veda-shila-deep);
+  border-radius: var(--veda-radius-lg);
+  padding: 1.75rem 1.5rem 1.5rem;
+  box-shadow: 0 10px 30px rgba(12, 20, 25, 0.05);
+}
+
+.veda-auth-card h1 {
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: 550;
+  margin: 0 0 0.35rem;
+  color: var(--veda-ink);
+}
+
+.veda-auth-sub {
+  margin: 0 0 1.25rem;
+  color: var(--veda-ink-soft);
+  font-size: 0.9rem;
+}
+
+.veda-field {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+
+.veda-field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--veda-ink);
+}
+
+.veda-auth-footer {
+  margin-top: 1.1rem;
+  font-size: 0.9rem;
+  color: var(--veda-ink-soft);
+}
+
+.veda-auth-footer a {
+  color: var(--veda-harita);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.veda-auth-footer a:hover {
+  text-decoration: underline;
+}
+
+.veda-error {
+  color: var(--veda-agni);
+  background: var(--veda-agni-soft);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem;
 }

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Fraunces, Manrope, Noto_Serif_Devanagari } from "next/font/google";
 import "./globals.css";
 import DisclaimerBar from "@/components/DisclaimerBar";
+import TopBar from "@/components/TopBar";
+import { AppProvider } from "@/lib/app-context";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -36,14 +38,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           minHeight: "100vh",
           display: "flex",
           flexDirection: "column",
-          // Wire next/font CSS vars into design tokens
           ["--font-display" as string]: "var(--font-fraunces), Georgia, serif",
           ["--font-ui" as string]: "var(--font-manrope), system-ui, sans-serif",
           ["--font-devanagari" as string]: "var(--font-noto-devanagari), serif",
         }}
       >
-        <main style={{ flex: 1 }}>{children}</main>
-        <DisclaimerBar />
+        <AppProvider>
+          <TopBar />
+          <main style={{ flex: 1 }}>{children}</main>
+          <DisclaimerBar />
+        </AppProvider>
       </body>
     </html>
   );

@@ -1,6 +1,9 @@
 "use client";
 
+import { useApp } from "@/lib/app-context";
+
 export default function DisclaimerBar() {
+  const { t } = useApp();
   return (
     <div
       style={{
@@ -14,8 +17,7 @@ export default function DisclaimerBar() {
         fontFamily: "var(--font-ui)",
       }}
     >
-      Educational decision support only — not a diagnosis or prescription. Clinical judgment of
-      a qualified vaidya is required.
+      {t("disclaimer")}
     </div>
   );
 }

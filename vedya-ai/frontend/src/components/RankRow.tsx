@@ -1,6 +1,7 @@
 "use client";
 import { RecommendedFormulation } from "@/lib/api";
 import SafetyDot from "./SafetyDot";
+import { useApp } from "@/lib/app-context";
 
 interface Props {
   formulation: RecommendedFormulation;
@@ -19,6 +20,7 @@ export default function RankRow({
   onCompareToggle,
   index,
 }: Props) {
+  const { t } = useApp();
   const { yoga_name, kalpana, score, safety_violations, rank_features, hard_excluded } = formulation;
 
   const maxScore = 10;
@@ -123,9 +125,9 @@ export default function RankRow({
             color: compareSelected ? "white" : "var(--veda-ink-soft)",
             fontFamily: "var(--font-ui)",
           }}
-          aria-label={compareSelected ? "Remove from compare" : "Add to compare"}
+          aria-label={compareSelected ? t("compareSelected") : t("compare")}
         >
-          {compareSelected ? "✓ Compare" : "Compare"}
+          {compareSelected ? `✓ ${t("compare")}` : t("compare")}
         </button>
       )}
     </div>
