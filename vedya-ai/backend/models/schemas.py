@@ -201,6 +201,19 @@ class RecommendationResponse(BaseModel):
     )
 
 
+class TranslateRequest(BaseModel):
+    texts: list[str]
+    target_locale: str = "hi"
+    source_locale: str = "en"
+
+
+class TranslateResponse(BaseModel):
+    translations: list[str]
+    target_locale: str
+    source_locale: str
+    provider: str
+
+
 class HealthResponse(BaseModel):
     status: str
     db_connected: bool

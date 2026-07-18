@@ -156,6 +156,8 @@ export interface FormulationDetail {
   differentiation_note?: string;
   ambiguity_notes?: Record<string, string>;
   external_only: boolean;
+  primary_indications?: string[];
+  secondary_indications?: string[];
   ingredients: Array<{
     name: string;
     sense_override?: string;
@@ -177,6 +179,73 @@ export interface AuthUser {
   email: string;
   display_name?: string | null;
   preferred_locale: string;
+  role?: string;
+}
+
+export interface AdminStats {
+  corpus_version: string;
+  llm_enabled: boolean;
+  counts: Record<string, number>;
+  top_recommended: Array<{ name: string; count: number }>;
+}
+
+export interface AdminUserRow {
+  user_id: string;
+  email: string;
+  display_name?: string | null;
+  role: string;
+  is_active: boolean;
+  created_at?: string | null;
+  last_login_at?: string | null;
+  conversations: number;
+  cases_run: number;
+}
+
+export interface AdminTrace {
+  trace_id: string;
+  created_at?: string | null;
+  vignette_summary?: string | null;
+  top_yoga?: string | null;
+  llm_used: boolean;
+  safety_hits: string[];
+  user_email?: string | null;
+}
+
+export interface AskPassage {
+  ref_id: string;
+  work: string;
+  sthana?: string;
+  chapter?: string;
+  verse_id?: string;
+  excerpt: string;
+  score: number;
+}
+
+export interface AskConcept {
+  canonical_name: string;
+  surface_form: string;
+  type: string;
+  synonyms: string[];
+}
+
+export interface AskFormulation {
+  yoga_id: string;
+  name: string;
+  kalpana?: string;
+  primary_hits: number;
+  total_hits: number;
+  matched_conditions: string[];
+}
+
+export interface AskResponse {
+  question: string;
+  answer: string;
+  llm_used: boolean;
+  concepts: AskConcept[];
+  passages: AskPassage[];
+  formulations: AskFormulation[];
+  coverage: "corpus" | "none";
+  disclaimer: string;
 }
 
 export interface AuthResponse {
@@ -210,10 +279,24 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  getPresets: () => apiFetch<PresetVignette[]>("/presets"),
+  getPresets: (locale?: string) =>
+    apiFetch<PresetVignette[]>(`/presets${locale ? `?locale=${locale}` : ""}`),
 
-  runPreset: (presetId: string) =>
-    apiFetch<RecommendationResponse>(`/presets/${presetId}`),
+  runPreset: (presetId: string, locale?: string) =>
+    apiFetch<RecommendationResponse>(
+      `/presets/${presetId}${locale ? `?locale=${encodeURIComponent(locale)}` : ""}`
+    ),
+
+  translate: (texts: string[], target_locale: string, source_locale = "en") =>
+    apiFetch<{
+      translations: string[];
+      target_locale: string;
+      source_locale: string;
+      provider: string;
+    }>("/translate", {
+      method: "POST",
+      body: JSON.stringify({ texts, target_locale, source_locale }),
+    }),
 
   recommend: (inp: VignetteInput) =>
     apiFetch<RecommendationResponse>("/recommend", {
@@ -315,5 +398,31 @@ export const api = {
     });
     if (!res.ok) throw new Error(`STT ${res.status}: ${await res.text()}`);
     return res.json() as Promise<{ text: string; language_code?: string }>;
+  },
+
+  ask: (question: string, locale = "en") =>
+    apiFetch<AskResponse>("/ask", {
+      method: "POST",
+      body: JSON.stringify({ question, locale }),
+    }),
+
+  adminStats: () => apiFetch<AdminStats>("/admin/stats"),
+
+  adminUsers: () => apiFetch<{ users: AdminUserRow[] }>("/admin/users"),
+
+  adminTraces: (limit = 25) => apiFetch<{ traces: AdminTrace[] }>(`/admin/traces?limit=${limit}`),
+
+  adminUnresolvedTerms: () =>
+    apiFetch<{ unresolved_terms: Array<{ term: string; count: number; last_seen?: string }>; total_distinct: number }>(
+      "/admin/unresolved-terms"
+    ),
+
+  adminUpdateUser: (userId: string, opts: { is_active?: boolean; role?: string }) => {
+    const params = new URLSearchParams();
+    if (opts.is_active !== undefined) params.set("is_active", String(opts.is_active));
+    if (opts.role) params.set("role", opts.role);
+    return apiFetch<{ updated: string }>(`/admin/users/${userId}?${params.toString()}`, {
+      method: "PATCH",
+    });
   },
 };

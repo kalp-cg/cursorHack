@@ -13,13 +13,16 @@ from typing import Optional
 
 import psycopg2
 from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 
 from models.schemas import (
     VignetteInput, RecommendationResponse, HealthResponse,
     PresetVignette, CompareResult, RecommendedFormulation,
-    EvidencePack,
+    EvidencePack, TranslateRequest, TranslateResponse,
 )
+from translate_service import translate_texts, last_provider
+from rag import answer_question
 from pipeline.intake import validate_and_normalize, get_presets, get_preset, build_clinical_frame
 from pipeline.understand import understand
 from pipeline.resolver import EntityResolver
@@ -31,7 +34,7 @@ from pipeline.explainer import explain_recommendation, explain_compare
 from auth import (
     AuthResponse, AuthUser, LoginRequest, SignupRequest,
     authenticate_user, create_access_token, create_user,
-    fetch_user_by_id, get_optional_user, require_user,
+    fetch_user_by_id, get_optional_user, require_admin, require_user,
 )
 from conversations import (
     add_message, assert_conversation_owner, build_followup_context,
@@ -155,7 +158,7 @@ async def health():
 async def signup(req: SignupRequest):
     db = _get_db()
     user = create_user(db, req)
-    token = create_access_token(user.user_id, user.email)
+    token = create_access_token(user.user_id, user.email, user.role)
     return AuthResponse(access_token=token, user=user)
 
 
@@ -163,7 +166,7 @@ async def signup(req: SignupRequest):
 async def login(req: LoginRequest):
     db = _get_db()
     user = authenticate_user(db, req)
-    token = create_access_token(user.user_id, user.email)
+    token = create_access_token(user.user_id, user.email, user.role)
     return AuthResponse(access_token=token, user=user)
 
 
@@ -178,6 +181,7 @@ async def me(user: AuthUser = Depends(require_user)):
         email=row["email"],
         display_name=row["display_name"],
         preferred_locale=row["preferred_locale"],
+        role=row.get("role", "user"),
     )
 
 
@@ -195,16 +199,73 @@ async def conversation_detail(conversation_id: str, user: AuthUser = Depends(req
 
 
 @app.get("/presets", response_model=list[PresetVignette], tags=["Demo"])
-async def list_presets():
-    return get_presets()
+async def list_presets(locale: str = Query("en")):
+    presets = get_presets()
+    loc = (locale or "en").lower()
+    if loc not in {"hi", "gu"}:
+        return presets
+    labels = [p.label for p in presets]
+    descs = [p.description for p in presets]
+    try:
+        t_labels = await translate_texts(labels, loc, "en")
+        t_descs = await translate_texts(descs, loc, "en")
+        return [
+            PresetVignette(
+                id=p.id,
+                label=t_labels[i] if i < len(t_labels) else p.label,
+                description=t_descs[i] if i < len(t_descs) else p.description,
+                vignette=p.vignette,
+            )
+            for i, p in enumerate(presets)
+        ]
+    except Exception as e:
+        print(f"✗ Preset translation skipped: {e}")
+        return presets
+
+
+@app.post("/translate", response_model=TranslateResponse, tags=["i18n"])
+async def translate_endpoint(body: TranslateRequest):
+    """Batch-translate strings via Google Cloud Translation or gtx fallback."""
+    if not body.texts:
+        return TranslateResponse(
+            translations=[],
+            target_locale=body.target_locale,
+            source_locale=body.source_locale,
+            provider="none",
+        )
+    if len(body.texts) > 80:
+        raise HTTPException(status_code=400, detail="Max 80 texts per request")
+    for t in body.texts:
+        if len(t) > 2000:
+            raise HTTPException(status_code=400, detail="Each text max 2000 chars")
+
+    provider = "none"
+    translations = await translate_texts(
+        body.texts, body.target_locale, body.source_locale
+    )
+    provider = last_provider()
+    return TranslateResponse(
+        translations=translations,
+        target_locale=body.target_locale,
+        source_locale=body.source_locale,
+        provider=provider,
+    )
 
 
 @app.get("/presets/{preset_id}", tags=["Demo"])
-async def run_preset(preset_id: str, user: Optional[AuthUser] = Depends(get_optional_user)):
+async def run_preset(
+    preset_id: str,
+    locale: str = Query("en"),
+    user: Optional[AuthUser] = Depends(get_optional_user),
+):
     preset = get_preset(preset_id)
     if not preset:
         raise HTTPException(status_code=404, detail=f"Preset '{preset_id}' not found")
-    return await recommend(preset.vignette, user=user)
+    loc = (locale or "en").lower()
+    if loc not in {"en", "hi", "gu"}:
+        loc = "en"
+    vignette = preset.vignette.model_copy(update={"locale": loc})
+    return await recommend(vignette, user=user)
 
 
 @app.post("/recommend", response_model=RecommendationResponse, tags=["Core"])
@@ -302,8 +363,9 @@ async def recommend(inp: VignetteInput, user: Optional[AuthUser] = Depends(get_o
         cur.execute(
             """
             INSERT INTO recommendation_traces
-                (trace_id, vignette_hash, corpus_version, llm_used, top_yoga_id, feature_vector, safety_hits, user_id, conversation_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (trace_id, vignette_hash, corpus_version, llm_used, top_yoga_id, feature_vector,
+                 safety_hits, user_id, conversation_id, unresolved_terms, vignette_summary)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 trace_id,
@@ -315,6 +377,8 @@ async def recommend(inp: VignetteInput, user: Optional[AuthUser] = Depends(get_o
                 json.dumps([v.rule_id for v in global_alerts]),
                 user.user_id if user else None,
                 conversation_id,
+                json.dumps(resolver_output.unresolved_terms or []),
+                vignette_summary[:300] if vignette_summary else None,
             ),
         )
         db.commit()
@@ -418,6 +482,27 @@ async def get_formulation(yoga_id: str):
     ]
     cur.close()
 
+    # Indication tags (primary / secondary)
+    cur2 = db.cursor()
+    cur2.execute(
+        """
+        SELECT c.canonical_name, yi.weight
+        FROM yoga_indications yi
+        JOIN concepts c ON yi.concept_id = c.concept_id
+        WHERE yi.yoga_id = %s
+        ORDER BY yi.weight, c.canonical_name
+        """,
+        (yoga_id,),
+    )
+    primary_indications: list[str] = []
+    secondary_indications: list[str] = []
+    for name, weight in cur2.fetchall():
+        if (weight or "").lower() == "primary":
+            primary_indications.append(name)
+        else:
+            secondary_indications.append(name)
+    cur2.close()
+
     return {
         "yoga_id": row[0], "name": row[1], "kalpana": row[2],
         "medium_class": row[3], "category": row[4],
@@ -426,6 +511,8 @@ async def get_formulation(yoga_id: str):
         "external_only": row[10],
         "ingredients": ingredients,
         "references": refs,
+        "primary_indications": primary_indications,
+        "secondary_indications": secondary_indications,
     }
 
 
@@ -596,6 +683,223 @@ async def voice_stt(
     if not result.get("text"):
         raise HTTPException(status_code=422, detail="Could not transcribe audio. Please try again.")
     return result
+
+
+# ─── Ask — RAG over the classical corpus ─────────────────────────────────────
+
+class AskRequest(BaseModel):
+    question: str
+    locale: str = "en"
+    top_k: int = 8
+
+
+@app.post("/ask", tags=["Ask"])
+async def ask(req: AskRequest, user: Optional[AuthUser] = Depends(get_optional_user)):
+    """Question answering grounded in the 16k+ verse corpus.
+    Query expansion via synonyms → FTS retrieval → citation-bound answer.
+    Optional LLM narration when a key is configured; retrieval always decides content."""
+    question = (req.question or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Question is required")
+    if len(question) > 500:
+        raise HTTPException(status_code=400, detail="Question too long (max 500 chars)")
+
+    locale = (req.locale or "en").lower()
+    if locale not in {"en", "hi", "gu"}:
+        locale = "en"
+
+    # Corpus + synonym table are English/IAST; bridge Devanagari/Gujarati questions
+    retrieval_question = question
+    import re as _re
+    if _re.search(r"[\u0900-\u097F\u0A80-\u0AFF]", question):
+        src = "gu" if _re.search(r"[\u0A80-\u0AFF]", question) else "hi"
+        try:
+            retrieval_question = (await translate_texts([question], "en", src))[0]
+        except Exception:
+            pass
+
+    db = _get_db()
+    result = await answer_question(
+        db, retrieval_question, llm_client=_llm_client, locale=locale, k=min(max(req.top_k, 3), 12)
+    )
+    result["question"] = question
+    if retrieval_question != question:
+        result["retrieval_question"] = retrieval_question
+
+    # Translate composed (non-LLM) answer for hi/gu; keep verse excerpts original
+    if locale != "en" and not result["llm_used"]:
+        try:
+            result["answer"] = (await translate_texts([result["answer"]], locale, "en"))[0]
+        except Exception:
+            pass
+
+    result["disclaimer"] = (
+        "Educational reference from classical sources — not a diagnosis or prescription."
+    )
+    return result
+
+
+# ─── Admin scope — corpus stewardship & oversight ────────────────────────────
+# Users (students/vaidyas) run cases. Admins (faculty/curators) close the loop:
+# see what the corpus is missing, watch usage, manage accounts.
+
+@app.get("/admin/stats", tags=["Admin"])
+async def admin_stats(admin: AuthUser = Depends(require_admin)):
+    """Corpus + usage overview for the curator dashboard."""
+    db = _get_db()
+    cur = db.cursor()
+    counts: dict[str, int] = {}
+    for label, sql in [
+        ("formulations", "SELECT COUNT(*) FROM yogas"),
+        ("herbs", "SELECT COUNT(*) FROM dravyas"),
+        ("concepts", "SELECT COUNT(*) FROM concepts"),
+        ("synonym_terms", "SELECT COUNT(*) FROM terms"),
+        ("constraint_rules", "SELECT COUNT(*) FROM constraint_rules"),
+        ("sense_rules", "SELECT COUNT(*) FROM sense_rules"),
+        ("references", 'SELECT COUNT(*) FROM "references"'),
+        ("users", "SELECT COUNT(*) FROM users"),
+        ("conversations", "SELECT COUNT(*) FROM conversations"),
+        ("cases_run", "SELECT COUNT(*) FROM recommendation_traces"),
+    ]:
+        cur.execute(sql)
+        counts[label] = cur.fetchone()[0]
+
+    cur.execute(
+        """
+        SELECT y.name, COUNT(*) AS n
+        FROM recommendation_traces rt
+        JOIN yogas y ON rt.top_yoga_id = y.yoga_id
+        GROUP BY y.name ORDER BY n DESC LIMIT 5
+        """
+    )
+    top_yogas = [{"name": r[0], "count": r[1]} for r in cur.fetchall()]
+
+    cur.execute("SELECT COUNT(*) FROM recommendation_traces WHERE created_at > NOW() - INTERVAL '24 hours'")
+    counts["cases_last_24h"] = cur.fetchone()[0]
+    cur.close()
+
+    return {
+        "corpus_version": CORPUS_VERSION,
+        "llm_enabled": LLM_ENABLED,
+        "counts": counts,
+        "top_recommended": top_yogas,
+    }
+
+
+@app.get("/admin/unresolved-terms", tags=["Admin"])
+async def admin_unresolved_terms(admin: AuthUser = Depends(require_admin)):
+    """Vocabulary gap report: terms users typed that the resolver could not map.
+    This is the curator's to-do list for expanding synonyms/corpus."""
+    db = _get_db()
+    cur = db.cursor()
+    cur.execute(
+        """
+        SELECT term, COUNT(*) AS n, MAX(created_at) AS last_seen
+        FROM recommendation_traces rt,
+             jsonb_array_elements_text(COALESCE(rt.unresolved_terms, '[]'::jsonb)) AS term
+        GROUP BY term ORDER BY n DESC, last_seen DESC LIMIT 50
+        """
+    )
+    rows = [{"term": r[0], "count": r[1], "last_seen": r[2].isoformat() if r[2] else None} for r in cur.fetchall()]
+    cur.close()
+    return {"unresolved_terms": rows, "total_distinct": len(rows)}
+
+
+@app.get("/admin/traces", tags=["Admin"])
+async def admin_traces(limit: int = Query(25, ge=1, le=100), admin: AuthUser = Depends(require_admin)):
+    """Recent cases run on the platform (anonymised summaries)."""
+    db = _get_db()
+    cur = db.cursor()
+    cur.execute(
+        """
+        SELECT rt.trace_id::text, rt.created_at, rt.vignette_summary, y.name,
+               rt.llm_used, rt.safety_hits, u.email
+        FROM recommendation_traces rt
+        LEFT JOIN yogas y ON rt.top_yoga_id = y.yoga_id
+        LEFT JOIN users u ON rt.user_id = u.user_id
+        ORDER BY rt.created_at DESC LIMIT %s
+        """,
+        (limit,),
+    )
+    traces = [
+        {
+            "trace_id": r[0],
+            "created_at": r[1].isoformat() if r[1] else None,
+            "vignette_summary": r[2],
+            "top_yoga": r[3],
+            "llm_used": r[4],
+            "safety_hits": r[5] or [],
+            "user_email": r[6],
+        }
+        for r in cur.fetchall()
+    ]
+    cur.close()
+    return {"traces": traces}
+
+
+@app.get("/admin/users", tags=["Admin"])
+async def admin_users(admin: AuthUser = Depends(require_admin)):
+    db = _get_db()
+    cur = db.cursor()
+    cur.execute(
+        """
+        SELECT u.user_id::text, u.email, u.display_name, u.role, u.is_active,
+               u.created_at, u.last_login_at,
+               (SELECT COUNT(*) FROM conversations c WHERE c.user_id = u.user_id) AS conversations,
+               (SELECT COUNT(*) FROM recommendation_traces rt WHERE rt.user_id = u.user_id) AS cases_run
+        FROM users u ORDER BY u.created_at DESC
+        """
+    )
+    users = [
+        {
+            "user_id": r[0],
+            "email": r[1],
+            "display_name": r[2],
+            "role": r[3],
+            "is_active": r[4],
+            "created_at": r[5].isoformat() if r[5] else None,
+            "last_login_at": r[6].isoformat() if r[6] else None,
+            "conversations": r[7],
+            "cases_run": r[8],
+        }
+        for r in cur.fetchall()
+    ]
+    cur.close()
+    return {"users": users}
+
+
+@app.patch("/admin/users/{user_id}", tags=["Admin"])
+async def admin_update_user(
+    user_id: str,
+    is_active: Optional[bool] = Query(None),
+    role: Optional[str] = Query(None),
+    admin: AuthUser = Depends(require_admin),
+):
+    """Activate/deactivate a user or change their role. Admins cannot demote themselves."""
+    if role is not None and role not in {"user", "admin"}:
+        raise HTTPException(status_code=400, detail="Role must be 'user' or 'admin'")
+    if user_id == admin.user_id and (role == "user" or is_active is False):
+        raise HTTPException(status_code=400, detail="You cannot demote or deactivate yourself")
+    if is_active is None and role is None:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    db = _get_db()
+    cur = db.cursor()
+    sets, params = [], []
+    if is_active is not None:
+        sets.append("is_active = %s")
+        params.append(is_active)
+    if role is not None:
+        sets.append("role = %s")
+        params.append(role)
+    params.append(user_id)
+    cur.execute(f"UPDATE users SET {', '.join(sets)} WHERE user_id = %s RETURNING user_id::text", params)
+    row = cur.fetchone()
+    db.commit()
+    cur.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"updated": row[0]}
 
 
 @app.get("/synonym-map/{concept_name}", tags=["Learn"])

@@ -21,12 +21,13 @@ export interface AuthUser {
   email: string;
   display_name?: string | null;
   preferred_locale: string;
+  role?: string;
 }
 
 interface AppState {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: (key: string) => string;
+  t: (key: string, vars?: Record<string, string>) => string;
   token: string | null;
   user: AuthUser | null;
   setSession: (token: string, user: AuthUser) => void;
@@ -37,6 +38,14 @@ interface AppState {
 
 const AppCtx = createContext<AppState | null>(null);
 
+function applyDocumentLocale(next: Locale) {
+  if (typeof document === "undefined") return;
+  document.documentElement.lang = next === "gu" ? "gu" : next === "hi" ? "hi" : "en";
+  document.documentElement.dataset.locale = next;
+  document.body.classList.remove("locale-en", "locale-hi", "locale-gu");
+  document.body.classList.add(`locale-${next}`);
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("en");
   const [token, setToken] = useState<string | null>(null);
@@ -46,7 +55,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const loc = (localStorage.getItem(LOCALE_KEY) as Locale) || "en";
-      if (loc === "en" || loc === "hi" || loc === "gu") setLocaleState(loc);
+      if (loc === "en" || loc === "hi" || loc === "gu") {
+        setLocaleState(loc);
+        applyDocumentLocale(loc);
+      }
       const tok = localStorage.getItem(TOKEN_KEY);
       const usr = localStorage.getItem(USER_KEY);
       if (tok && usr) {
@@ -62,20 +74,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next);
     localStorage.setItem(LOCALE_KEY, next);
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = next;
-    }
+    applyDocumentLocale(next);
   }, []);
 
-  const setSession = useCallback((tok: string, usr: AuthUser) => {
-    setToken(tok);
-    setUser(usr);
-    localStorage.setItem(TOKEN_KEY, tok);
-    localStorage.setItem(USER_KEY, JSON.stringify(usr));
-    if (usr.preferred_locale === "en" || usr.preferred_locale === "hi" || usr.preferred_locale === "gu") {
-      setLocale(usr.preferred_locale);
-    }
-  }, [setLocale]);
+  const setSession = useCallback(
+    (tok: string, usr: AuthUser) => {
+      setToken(tok);
+      setUser(usr);
+      localStorage.setItem(TOKEN_KEY, tok);
+      localStorage.setItem(USER_KEY, JSON.stringify(usr));
+      if (
+        usr.preferred_locale === "en" ||
+        usr.preferred_locale === "hi" ||
+        usr.preferred_locale === "gu"
+      ) {
+        setLocale(usr.preferred_locale);
+      }
+    },
+    [setLocale]
+  );
 
   const logout = useCallback(() => {
     setToken(null);
@@ -96,7 +113,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => ({
       locale,
       setLocale,
-      t: (key: string) => translate(locale, key),
+      t: (key: string, vars?: Record<string, string>) => translate(locale, key, vars),
       token,
       user,
       setSession,

@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   api,
@@ -19,10 +19,19 @@ import ListenButton from "@/components/ListenButton";
 import VoiceMic from "@/components/VoiceMic";
 import CounterfactualPanel from "@/components/CounterfactualPanel";
 import ShareCaseBar, { decodeCaseParam } from "@/components/ShareCaseBar";
+import { TranslatedText } from "@/components/TranslatedText";
+import ScoreBreakdown from "@/components/ScoreBreakdown";
+import SensePanel from "@/components/SensePanel";
+import DiscriminationCard from "@/components/DiscriminationCard";
 import { useApp } from "@/lib/app-context";
 import Link from "next/link";
 
-const COMORBIDITIES = ["Diabetes", "Pregnancy", "Amlapitta (Hyperacidity)", "Raktapitta (Bleeding)"];
+const COMORBIDITY_KEYS = [
+  { key: "comorbidityDiabetes", value: "Diabetes" },
+  { key: "comorbidityPregnancy", value: "Pregnancy" },
+  { key: "comorbidityAmlapitta", value: "Amlapitta" },
+  { key: "comorbidityRaktapitta", value: "Raktapitta" },
+] as const;
 
 function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
   const { t } = useApp();
@@ -44,7 +53,7 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
       free_text: freeText || undefined,
       symptoms,
       rogas: [],
-      comorbidities: selectedComorbs.map((c) => c.split(" ")[0]),
+      comorbidities: selectedComorbs,
       top_k: 10,
     });
     setRunning(false);
@@ -95,7 +104,7 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
           className="flex-1 rounded-xl px-4 py-2 text-sm outline-none veda-input"
         />
         <PrimaryButton size="sm" onClick={addSymptom}>
-          +
+          {t("addSymptom")}
         </PrimaryButton>
       </div>
       <div className="flex flex-wrap gap-2 mb-6">
@@ -112,15 +121,15 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
         {t("comorbiditiesLabel")}
       </label>
       <div className="flex flex-wrap gap-3 mb-8">
-        {COMORBIDITIES.map((c) => {
-          const selected = selectedComorbs.includes(c);
+        {COMORBIDITY_KEYS.map((c) => {
+          const selected = selectedComorbs.includes(c.value);
           return (
             <button
-              key={c}
+              key={c.value}
               type="button"
               onClick={() =>
                 setSelectedComorbs((prev) =>
-                  selected ? prev.filter((x) => x !== c) : [...prev, c]
+                  selected ? prev.filter((x) => x !== c.value) : [...prev, c.value]
                 )
               }
               className="px-4 py-2 rounded-xl text-sm font-medium min-h-[44px] transition-all"
@@ -130,7 +139,7 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
                 border: `1px solid ${selected ? "var(--veda-kesar)" : "var(--veda-fog)"}`,
               }}
             >
-              {c}
+              {t(c.key)}
             </button>
           );
         })}
@@ -159,6 +168,7 @@ function ResultsContent() {
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null);
   const [followUp, setFollowUp] = useState("");
   const [asking, setAsking] = useState(false);
+  const localeBoot = useRef(true);
 
   useEffect(() => {
     if (searchParams.get("intake") === "true") {
@@ -194,7 +204,39 @@ function ResultsContent() {
       if (parsed.conversation_id) setConversationId(parsed.conversation_id);
     }
     setLoading(false);
-  }, [searchParams, setConversationId, locale]);
+  }, [searchParams, setConversationId]);
+
+  // Re-rank with new locale so explanations switch EN ↔ HI ↔ GU
+  useEffect(() => {
+    if (localeBoot.current) {
+      localeBoot.current = false;
+      return;
+    }
+    if (showIntake) return;
+    const raw = sessionStorage.getItem("vedya_input");
+    if (!raw) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const inp = JSON.parse(raw) as VignetteInput;
+        const payload = { ...inp, locale };
+        sessionStorage.setItem("vedya_input", JSON.stringify(payload));
+        setLoading(true);
+        const result = await api.recommend(payload);
+        if (cancelled) return;
+        if (result.conversation_id) setConversationId(result.conversation_id);
+        sessionStorage.setItem("vedya_results", JSON.stringify(result));
+        setResponse(result);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, showIntake, setConversationId]);
 
   const handleIntakeSubmit = useCallback(async (inp: VignetteInput) => {
     setLoading(true);
@@ -214,7 +256,7 @@ function ResultsContent() {
   }, [locale, setConversationId]);
 
   async function askFollowUp() {
-    if (!followUp.trim() || !user) return;
+    if (!followUp.trim()) return;
     setAsking(true);
     try {
       const result = await api.recommend({
@@ -224,8 +266,10 @@ function ResultsContent() {
         comorbidities: [],
         top_k: 10,
         locale,
-        conversation_id: conversationId || response?.conversation_id || undefined,
-        follow_up: true,
+        conversation_id: user
+          ? conversationId || response?.conversation_id || undefined
+          : undefined,
+        follow_up: Boolean(user && (conversationId || response?.conversation_id)),
       });
       if (result.conversation_id) setConversationId(result.conversation_id);
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
@@ -313,17 +357,28 @@ function ResultsContent() {
       </div>
 
       <div className="max-w-3xl mx-auto px-6 py-8">
+        <div className="veda-results-meta mb-5">
+          <span className="veda-chip-meta">
+            {response.llm_used ? t("modeLlm") : t("modeTemplate")}
+          </span>
+          <span className="veda-chip-meta">
+            {t("corpusBadge")} {response.corpus_version}
+          </span>
+        </div>
+
         {/* Resolved terms */}
         {response.resolved_concepts.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-6">
+          <div className="flex flex-wrap gap-2 mb-4">
             {response.resolved_concepts.map((rc) => (
               <TermChip key={rc.concept_id} term={rc.surface_form} canonical={rc.canonical_name} />
             ))}
-            {response.unresolved_terms.map((t) => (
-              <TermChip key={t} term={t} variant="unresolved" />
+            {response.unresolved_terms.map((term) => (
+              <TermChip key={term} term={term} variant="unresolved" />
             ))}
           </div>
         )}
+
+        <SensePanel items={response.sense_disambiguations || []} />
 
         {/* 1. Safety panel */}
         {globalAlerts.length > 0 && <SafetyPanel violations={globalAlerts} />}
@@ -343,6 +398,25 @@ function ResultsContent() {
             <div className="text-sm mb-3" style={{ color: "var(--veda-ink-soft)" }}>
               {topResult.kalpana} · {t("fitScore")}: {topResult.score.toFixed(1)}
             </div>
+
+            {(topResult.primary_indications.length > 0 || topResult.secondary_indications.length > 0) && (
+              <div className="veda-ind-block mb-4">
+                <div className="veda-ind-label">{t("indicationsTitle")}</div>
+                {topResult.primary_indications.length > 0 && (
+                  <p>
+                    <strong>{t("primaryIndications")}:</strong>{" "}
+                    {topResult.primary_indications.join(" · ")}
+                  </p>
+                )}
+                {topResult.secondary_indications.length > 0 && (
+                  <p>
+                    <strong>{t("secondaryIndications")}:</strong>{" "}
+                    {topResult.secondary_indications.join(" · ")}
+                  </p>
+                )}
+              </div>
+            )}
+
             {topResult.explanation && (
               <p className="text-sm leading-relaxed mb-4" style={{ color: "var(--veda-ink)" }}>
                 {topResult.explanation.summary}
@@ -355,16 +429,48 @@ function ResultsContent() {
                 summary={topResult.explanation?.summary || ""}
               />
             </div>
-            {topResult.references.slice(0, 1).map((r) => (
+            {topResult.rank_features && (
+              <div className="mb-4">
+                <ScoreBreakdown features={topResult.rank_features} />
+              </div>
+            )}
+            {topResult.references.slice(0, 2).map((r) => (
               <CitationCard key={r.ref_id} reference={r} />
             ))}
             {topResult.differentiation_note && (
-              <p className="mt-3 text-sm italic" style={{ color: "var(--veda-ink-soft)" }}>
-                {topResult.differentiation_note}
-              </p>
+              <TranslatedText
+                as="p"
+                text={topResult.differentiation_note}
+                className="mt-3 text-sm italic"
+                style={{ color: "var(--veda-ink-soft)" }}
+              />
             )}
+            <div className="mt-4">
+              <PrimaryButton
+                size="sm"
+                variant="outline"
+                onClick={() => router.push(`/detail/${topResult.yoga_id}`)}
+              >
+                {t("viewDetail")} →
+              </PrimaryButton>
+            </div>
           </div>
         )}
+
+        {activeResults.length >= 2 && (
+          <DiscriminationCard
+            a={activeResults[0]}
+            b={activeResults[1]}
+            onCompare={() =>
+              router.push(`/compare?a=${activeResults[0].yoga_id}&b=${activeResults[1].yoga_id}`)
+            }
+          />
+        )}
+
+        <div className="veda-tip mb-6">
+          <strong>{t("teachingTip")}</strong>
+          <span>{t("teachingTipBody")}</span>
+        </div>
 
         <CounterfactualPanel
           baseline={response}
@@ -374,40 +480,8 @@ function ResultsContent() {
           }}
         />
 
-        {/* 3. Compare teaser */}
-        {activeResults.length >= 2 && (
-          <div
-            className="rounded-xl p-4 mb-6 flex flex-wrap items-center justify-between gap-3"
-            style={{ background: "var(--veda-harita-soft)", border: "1px solid var(--veda-harita)" }}
-          >
-            <span className="text-sm font-medium" style={{ color: "var(--veda-harita)" }}>
-              {t("whyOver", { a: activeResults[0]?.yoga_name || "", b: activeResults[1]?.yoga_name || "" })}
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <ListenButton
-                yogaName={activeResults[0].yoga_name}
-                summary={
-                  activeResults[0].explanation?.summary ||
-                  `${activeResults[0].yoga_name} vs ${activeResults[1].yoga_name}`
-                }
-                winnerReason={t("whyOver", {
-                  a: activeResults[0].yoga_name,
-                  b: activeResults[1].yoga_name,
-                })}
-              />
-              <PrimaryButton
-                size="sm"
-                onClick={() =>
-                  router.push(`/compare?a=${activeResults[0].yoga_id}&b=${activeResults[1].yoga_id}`)
-                }
-              >
-                {t("compare")} →
-              </PrimaryButton>
-            </div>
-          </div>
-        )}
-
         {/* 4. Full ranked list */}
+        <h3 className="veda-list-title">{t("candidates")}</h3>
         <div className="space-y-2">
           {response.results.map((r, idx) => (
             <RankRow
@@ -445,7 +519,7 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* Follow-up conversation */}
+        {/* Follow-up conversation — open to guests for usefulness */}
         <div
           className="mt-8 rounded-2xl p-5"
           style={{ background: "var(--veda-surface)", border: "1px solid var(--veda-fog)" }}
@@ -454,29 +528,28 @@ function ResultsContent() {
             {t("followUpTitle")}
           </h3>
           <p className="text-sm mb-3" style={{ color: "var(--veda-ink-soft)" }}>
-            {user ? t("followUpHint") : t("loginToContinue")}
+            {user ? t("followUpHint") : t("followUpOpen")}
           </p>
-          {user ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
-                <input
-                  className="veda-input flex-1"
-                  value={followUp}
-                  onChange={(e) => setFollowUp(e.target.value)}
-                  placeholder={t("followUpPlaceholder")}
-                  onKeyDown={(e) => e.key === "Enter" && askFollowUp()}
-                />
-                <PrimaryButton onClick={askFollowUp} disabled={asking || !followUp.trim()}>
-                  {asking ? t("running") : t("askFollowUp")}
-                </PrimaryButton>
-              </div>
-              <VoiceMic onTranscript={(text) => setFollowUp((prev) => (prev ? `${prev} ${text}` : text))} />
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <input
+                className="veda-input flex-1"
+                value={followUp}
+                onChange={(e) => setFollowUp(e.target.value)}
+                placeholder={t("followUpPlaceholder")}
+                onKeyDown={(e) => e.key === "Enter" && askFollowUp()}
+              />
+              <PrimaryButton onClick={askFollowUp} disabled={asking || !followUp.trim()}>
+                {asking ? t("running") : t("askFollowUp")}
+              </PrimaryButton>
             </div>
-          ) : (
-            <Link href="/login" style={{ color: "var(--veda-harita)", fontSize: "0.9rem" }}>
-              {t("login")} →
-            </Link>
-          )}
+            <VoiceMic onTranscript={(text) => setFollowUp((prev) => (prev ? `${prev} ${text}` : text))} />
+            {!user && (
+              <Link href="/signup" style={{ color: "var(--veda-harita)", fontSize: "0.85rem" }}>
+                {t("signup")} → {t("history")}
+              </Link>
+            )}
+          </div>
         </div>
 
         <ShareCaseBar response={response} />

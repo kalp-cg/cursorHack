@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (lower(email));
 
+-- Role scope: 'user' = student/practitioner, 'admin' = corpus curator/faculty
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user'
+    CHECK (role IN ('user', 'admin'));
+
 CREATE TABLE IF NOT EXISTS conversations (
     conversation_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id         UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -47,3 +51,7 @@ ALTER TABLE recommendation_traces
     ADD COLUMN IF NOT EXISTS conversation_id UUID REFERENCES conversations(conversation_id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_traces_user ON recommendation_traces (user_id, created_at DESC);
+
+-- Curator analytics: what users asked that the corpus could not answer
+ALTER TABLE recommendation_traces ADD COLUMN IF NOT EXISTS unresolved_terms JSONB;
+ALTER TABLE recommendation_traces ADD COLUMN IF NOT EXISTS vignette_summary TEXT;

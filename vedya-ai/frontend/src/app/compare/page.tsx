@@ -20,18 +20,23 @@ function CompareContent() {
 
   useEffect(() => {
     if (!yogaAId || !yogaBId) {
-      setError("Two formulation IDs required (a= and b= params).");
+      setError(t("noResults"));
       setLoading(false);
       return;
     }
-    const stored = sessionStorage.getItem("vedya_results");
-    const currentInput = stored ? JSON.parse(stored)?.vignette_summary : undefined;
+    let vignette: { free_text?: string; symptoms?: string[]; rogas?: string[]; comorbidities?: string[]; locale?: string } = { locale };
+    try {
+      const raw = sessionStorage.getItem("vedya_input");
+      if (raw) vignette = { ...JSON.parse(raw), locale };
+    } catch {
+      /* ignore */
+    }
     api
-      .compare(yogaAId, yogaBId, currentInput ? { free_text: currentInput, locale } : { locale })
+      .compare(yogaAId, yogaBId, vignette)
       .then(setResult)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
-  }, [yogaAId, yogaBId, locale]);
+  }, [yogaAId, yogaBId, locale, t]);
 
   const winnerName =
     result?.winner_yoga_id === result?.yoga_a.yoga_id

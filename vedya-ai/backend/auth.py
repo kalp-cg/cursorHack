@@ -48,6 +48,7 @@ class AuthUser(BaseModel):
     email: str
     display_name: Optional[str] = None
     preferred_locale: str = "en"
+    role: str = "user"
 
 
 class AuthResponse(BaseModel):
@@ -64,11 +65,12 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
-def create_access_token(user_id: str, email: str) -> str:
+def create_access_token(user_id: str, email: str, role: str = "user") -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id,
         "email": email,
+        "role": role,
         "iat": now,
         "exp": now + timedelta(hours=JWT_EXPIRE_HOURS),
         "iss": "vedyaai",
@@ -102,7 +104,7 @@ def fetch_user_by_email(db, email: str) -> Optional[dict[str, Any]]:
     cur = db.cursor()
     cur.execute(
         """
-        SELECT user_id::text, email, password_hash, display_name, preferred_locale, is_active
+        SELECT user_id::text, email, password_hash, display_name, preferred_locale, is_active, role
         FROM users WHERE lower(email) = lower(%s)
         """,
         (email,),
@@ -118,6 +120,7 @@ def fetch_user_by_email(db, email: str) -> Optional[dict[str, Any]]:
         "display_name": row[3],
         "preferred_locale": row[4],
         "is_active": row[5],
+        "role": row[6],
     }
 
 
@@ -125,7 +128,7 @@ def fetch_user_by_id(db, user_id: str) -> Optional[dict[str, Any]]:
     cur = db.cursor()
     cur.execute(
         """
-        SELECT user_id::text, email, display_name, preferred_locale, is_active
+        SELECT user_id::text, email, display_name, preferred_locale, is_active, role
         FROM users WHERE user_id = %s
         """,
         (user_id,),
@@ -140,6 +143,7 @@ def fetch_user_by_id(db, user_id: str) -> Optional[dict[str, Any]]:
         "display_name": row[2],
         "preferred_locale": row[3],
         "is_active": row[4],
+        "role": row[5],
     }
 
 
@@ -155,7 +159,7 @@ def create_user(db, req: SignupRequest) -> AuthUser:
             """
             INSERT INTO users (email, password_hash, display_name, preferred_locale)
             VALUES (%s, %s, %s, %s)
-            RETURNING user_id::text, email, display_name, preferred_locale
+            RETURNING user_id::text, email, display_name, preferred_locale, role
             """,
             (email, hash_password(req.password), req.display_name, req.preferred_locale),
         )
@@ -172,6 +176,7 @@ def create_user(db, req: SignupRequest) -> AuthUser:
         email=row[1],
         display_name=row[2],
         preferred_locale=row[3],
+        role=row[4] or "user",
     )
 
 
@@ -191,6 +196,7 @@ def authenticate_user(db, req: LoginRequest) -> AuthUser:
         email=user["email"],
         display_name=user["display_name"],
         preferred_locale=user["preferred_locale"],
+        role=user.get("role", "user"),
     )
 
 
@@ -207,6 +213,7 @@ def get_optional_user(
         user_id=str(payload["sub"]),
         email=str(payload.get("email", "")),
         preferred_locale="en",
+        role=str(payload.get("role", "user")),
     )
 
 
@@ -220,7 +227,15 @@ def require_user(
         user_id=str(payload["sub"]),
         email=str(payload.get("email", "")),
         preferred_locale="en",
+        role=str(payload.get("role", "user")),
     )
+
+
+def require_admin(user: AuthUser = Depends(require_user)) -> AuthUser:
+    """Admin-only gate — corpus curators / faculty administrators."""
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
 
 def ensure_uuid(value: str, field: str = "id") -> str:

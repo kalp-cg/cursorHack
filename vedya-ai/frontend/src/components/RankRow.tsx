@@ -106,7 +106,7 @@ export default function RankRow({
 
         {hard_excluded && (
           <div className="text-xs mt-1 font-medium" style={{ color: "var(--veda-agni)" }}>
-            Excluded — unsuitable under current constraints
+            {t("excludedNote")}
           </div>
         )}
       </div>
