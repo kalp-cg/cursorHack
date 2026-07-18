@@ -5,6 +5,7 @@ import { api, CompareResult } from "@/lib/api";
 import CompareTable from "@/components/CompareTable";
 import PrimaryButton from "@/components/PrimaryButton";
 import ListenButton from "@/components/ListenButton";
+import ErrorBanner from "@/components/ErrorBanner";
 import { useApp } from "@/lib/app-context";
 
 function CompareContent() {
@@ -20,17 +21,25 @@ function CompareContent() {
 
   useEffect(() => {
     if (!yogaAId || !yogaBId) {
-      setError(t("noResults"));
+      setError(t("selectTwoCompare"));
       setLoading(false);
       return;
     }
-    let vignette: { free_text?: string; symptoms?: string[]; rogas?: string[]; comorbidities?: string[]; locale?: string } = { locale };
+    let vignette: {
+      free_text?: string;
+      symptoms?: string[];
+      rogas?: string[];
+      comorbidities?: string[];
+      locale?: string;
+    } = { locale };
     try {
       const raw = sessionStorage.getItem("vedya_input");
       if (raw) vignette = { ...JSON.parse(raw), locale };
     } catch {
       /* ignore */
     }
+    setLoading(true);
+    setError("");
     api
       .compare(yogaAId, yogaBId, vignette)
       .then(setResult)
@@ -47,29 +56,24 @@ function CompareContent() {
 
   return (
     <div style={{ background: "var(--veda-shila)", minHeight: "100vh" }}>
-      <div
-        className="sticky top-0 z-10 px-6 py-3 flex items-center gap-4"
-        style={{ background: "var(--veda-ink)" }}
-      >
-        <button onClick={() => router.back()} className="text-sm" style={{ color: "rgba(247,249,248,0.6)" }}>
-          ← Results
-        </button>
-        <span
-          className="text-base font-semibold"
-          style={{ fontFamily: "var(--font-display)", color: "#F7F9F8" }}
-        >
-          {t("compare")}
-        </span>
-      </div>
-
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <h1
-            className="text-2xl font-medium"
-            style={{ fontFamily: "var(--font-display)", color: "var(--veda-ink)" }}
-          >
-            Formulation Comparison
-          </h1>
+          <div>
+            <PrimaryButton size="sm" variant="outline" onClick={() => router.push("/results")}>
+              ← {t("backToResults")}
+            </PrimaryButton>
+            <h1
+              className="text-2xl font-medium mt-4"
+              style={{ fontFamily: "var(--font-display)", color: "var(--veda-ink)" }}
+            >
+              {t("compareTitle")}
+            </h1>
+            {result?.winner_reason && (
+              <p className="text-sm mt-1" style={{ color: "var(--veda-harita)" }}>
+                {t("preferredForCase")}: {winnerName}
+              </p>
+            )}
+          </div>
           {result && (
             <ListenButton
               yogaName={winnerName || result.yoga_a.yoga_name}
@@ -89,21 +93,10 @@ function CompareContent() {
         )}
 
         {error && (
-          <div
-            className="text-sm p-4 rounded-xl"
-            style={{ background: "var(--veda-agni-soft)", color: "var(--veda-agni)" }}
-          >
-            {error}
-          </div>
+          <ErrorBanner message={error} onDismiss={() => setError("")} dismissLabel={t("dismiss")} />
         )}
 
         {result && !loading && <CompareTable result={result} />}
-
-        <div className="mt-8 flex gap-4">
-          <PrimaryButton variant="outline" onClick={() => router.back()}>
-            ← Back to Results
-          </PrimaryButton>
-        </div>
       </div>
     </div>
   );

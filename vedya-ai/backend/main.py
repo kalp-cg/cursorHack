@@ -11,10 +11,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-import psycopg2
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from contextvars import ContextVar
 
 from models.schemas import (
     VignetteInput, RecommendationResponse, HealthResponse,
@@ -45,28 +45,33 @@ from voice import (
 )
 from fastapi.responses import Response
 from fastapi import File, Form, UploadFile
+from db_pool import init_pool, close_pool, pool_ready, get_connection
+from rate_limit import rate_limit
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://vedya:vedyapass@localhost:5432/vedyaai")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://vedya:vedyapass@localhost:5433/vedyaai")
 LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
 CORPUS_VERSION = os.getenv("CORPUS_VERSION", "1.0.0")
+ENV = os.getenv("VEDYA_ENV", os.getenv("ENV", "development")).lower()
 
-# Global state
-_db_conn = None
 _llm_client = None
+_db_conn_var: ContextVar = ContextVar("vedya_db_conn", default=None)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _db_conn, _llm_client
-    # Connect DB
-    try:
-        _db_conn = psycopg2.connect(DATABASE_URL)
-        print("✓ Database connected")
-    except Exception as e:
-        print(f"✗ Database connection failed: {e}")
-        _db_conn = None
+    global _llm_client
+    jwt_secret = os.getenv("JWT_SECRET", "vedya-dev-secret-change-me-in-production")
+    if ENV in {"production", "prod"} and (
+        not jwt_secret or jwt_secret == "vedya-dev-secret-change-me-in-production"
+    ):
+        raise RuntimeError("JWT_SECRET must be set to a strong secret in production")
 
-    # Init LLM client
+    try:
+        init_pool(DATABASE_URL, minconn=1, maxconn=int(os.getenv("DB_POOL_MAX", "8")))
+        print("✓ Database pool ready")
+    except Exception as e:
+        print(f"✗ Database pool failed: {e}")
+
     if LLM_ENABLED:
         api_key = os.getenv("OPENAI_API_KEY")
         if api_key:
@@ -84,10 +89,8 @@ async def lifespan(app: FastAPI):
         print("✓ LLM disabled by config (LLM_ENABLED=false)")
 
     yield
-
-    if _db_conn:
-        _db_conn.close()
-        print("✓ Database connection closed")
+    close_pool()
+    print("✓ Database pool closed")
 
 
 app = FastAPI(
@@ -100,7 +103,6 @@ app = FastAPI(
 _extra_origins = [o.strip() for o in os.getenv("FRONTEND_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    # Local dev origins + deployed frontend URL(s) via FRONTEND_ORIGINS env
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -113,10 +115,23 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def db_connection_middleware(request: Request, call_next):
+    if not pool_ready():
+        return await call_next(request)
+    with get_connection() as conn:
+        token = _db_conn_var.set(conn)
+        try:
+            return await call_next(request)
+        finally:
+            _db_conn_var.reset(token)
+
+
 def _get_db():
-    if _db_conn is None:
+    conn = _db_conn_var.get()
+    if conn is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return _db_conn
+    return conn
 
 
 def _vignette_summary(frame) -> str:
@@ -135,15 +150,16 @@ async def health():
     db_ok = False
     yoga_count = 0
     herb_count = 0
-    if _db_conn:
+    if pool_ready():
         try:
-            cur = _db_conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM yogas")
-            yoga_count = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM dravyas")
-            herb_count = cur.fetchone()[0]
-            cur.close()
-            db_ok = True
+            with get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM yogas")
+                yoga_count = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM dravyas")
+                herb_count = cur.fetchone()[0]
+                cur.close()
+                db_ok = True
         except Exception:
             pass
     return HealthResponse(
@@ -157,7 +173,8 @@ async def health():
 
 
 @app.post("/auth/signup", response_model=AuthResponse, tags=["Auth"])
-async def signup(req: SignupRequest):
+async def signup(req: SignupRequest, request: Request):
+    rate_limit(request, limit=10, window_sec=60, bucket="auth")
     db = _get_db()
     user = create_user(db, req)
     token = create_access_token(user.user_id, user.email, user.role)
@@ -165,7 +182,8 @@ async def signup(req: SignupRequest):
 
 
 @app.post("/auth/login", response_model=AuthResponse, tags=["Auth"])
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request):
+    rate_limit(request, limit=20, window_sec=60, bucket="auth")
     db = _get_db()
     user = authenticate_user(db, req)
     token = create_access_token(user.user_id, user.email, user.role)
@@ -226,8 +244,9 @@ async def list_presets(locale: str = Query("en")):
 
 
 @app.post("/translate", response_model=TranslateResponse, tags=["i18n"])
-async def translate_endpoint(body: TranslateRequest):
-    """Batch-translate strings via Google Cloud Translation or gtx fallback."""
+async def translate_endpoint(body: TranslateRequest, request: Request):
+    """Batch-translate strings via free translation chain."""
+    rate_limit(request, limit=30, window_sec=60, bucket="translate")
     if not body.texts:
         return TranslateResponse(
             translations=[],
@@ -267,11 +286,17 @@ async def run_preset(
     if loc not in {"en", "gu"}:
         loc = "en"
     vignette = preset.vignette.model_copy(update={"locale": loc})
-    return await recommend(vignette, user=user)
+    return await recommend(vignette, request=None, user=user)
 
 
 @app.post("/recommend", response_model=RecommendationResponse, tags=["Core"])
-async def recommend(inp: VignetteInput, user: Optional[AuthUser] = Depends(get_optional_user)):
+async def recommend(
+    inp: VignetteInput,
+    request: Request = None,
+    user: Optional[AuthUser] = Depends(get_optional_user),
+):
+    if request is not None:
+        rate_limit(request, limit=40, window_sec=60, bucket="recommend")
     db = _get_db()
     trace_id = str(uuid.uuid4())
     conversation_id = inp.conversation_id
@@ -588,26 +613,56 @@ async def compare_formulations(
     yoga_a_data = await fetch_yoga_data(yoga_a_id)
     yoga_b_data = await fetch_yoga_data(yoga_b_id)
 
-    # Build minimal ranked results for evidence packs
-    from pipeline.ranker import RankFeatures
-    def make_result(yoga_data: dict, score: float) -> RecommendedFormulation:
+    # Run safety on both formulations (same gates as recommend)
+    safety = SafetyEngine(db)
+    safety_results = safety.apply([yoga_a_data, yoga_b_data], frame)
+    safety_map = {sr.yoga_id: sr for sr in safety_results}
+
+    # Score via ranker features for honest comparison (not zeros)
+    ranked = rank([yoga_a_data, yoga_b_data], safety_results, frame, top_k=2)
+    score_map = {r.yoga_id: r.score for r in ranked}
+    for r in ranked:
+        # Attach safety onto packs via make_result
+        pass
+
+    def make_result(yoga_data: dict) -> RecommendedFormulation:
         from models.schemas import RankFeatures as RF
+        sr = safety_map.get(yoga_data["yoga_id"])
         return RecommendedFormulation(
-            rank=1, yoga_id=yoga_data["yoga_id"],
+            rank=1,
+            yoga_id=yoga_data["yoga_id"],
             yoga_name=yoga_data["yoga_name"],
             kalpana=yoga_data.get("kalpana_name"),
-            score=score,
-            rank_features=RF(),
+            score=score_map.get(yoga_data["yoga_id"], 0.0),
+            rank_features=RF(total_score=score_map.get(yoga_data["yoga_id"], 0.0)),
             primary_indications=yoga_data.get("all_primary", []),
             secondary_indications=yoga_data.get("all_secondary", []),
             references=[],
             differentiation_note=yoga_data.get("differentiation_note"),
+            safety_violations=sr.violations if sr else [],
+            hard_excluded=bool(sr and sr.hard_excluded),
         )
 
-    pack_a = build_evidence_pack(yoga_a_data, make_result(yoga_a_data, 0.0))
-    pack_b = build_evidence_pack(yoga_b_data, make_result(yoga_b_data, 0.0))
+    pack_a = build_evidence_pack(yoga_a_data, make_result(yoga_a_data))
+    pack_b = build_evidence_pack(yoga_b_data, make_result(yoga_b_data))
     locale = (inp.locale or "en").lower() if inp else "en"
-    return await explain_compare(pack_a, pack_b, vignette_summary, _llm_client, locale=locale)
+    if locale not in {"en", "gu"}:
+        locale = "en"
+    result = await explain_compare(pack_a, pack_b, vignette_summary, _llm_client, locale=locale)
+    # Prefer higher-scoring non-excluded yoga as winner when scores differ
+    sa = score_map.get(yoga_a_id, 0.0)
+    sb = score_map.get(yoga_b_id, 0.0)
+    a_excl = bool(safety_map.get(yoga_a_id) and safety_map[yoga_a_id].hard_excluded)
+    b_excl = bool(safety_map.get(yoga_b_id) and safety_map[yoga_b_id].hard_excluded)
+    if a_excl and not b_excl:
+        result.winner_yoga_id = yoga_b_id
+        result.winner_reason = result.winner_reason or "Formulation A excluded by safety gates"
+    elif b_excl and not a_excl:
+        result.winner_yoga_id = yoga_a_id
+        result.winner_reason = result.winner_reason or "Formulation B excluded by safety gates"
+    elif sa != sb and not (a_excl or b_excl):
+        result.winner_yoga_id = yoga_a_id if sa > sb else yoga_b_id
+    return result
 
 
 @app.get("/voice/status", tags=["Voice"])
@@ -617,11 +672,13 @@ async def get_voice_status():
 
 @app.post("/voice/tts", tags=["Voice"])
 async def voice_tts(
+    request: Request,
     text: str = Form(...),
     locale: str = Form("en"),
     voice_id: Optional[str] = Form(None),
 ):
     """Speak arbitrary clinical text (explanation, compare reason, case read-aloud)."""
+    rate_limit(request, limit=15, window_sec=60, bucket="voice")
     if not voice_configured():
         raise HTTPException(
             status_code=503,
@@ -668,10 +725,12 @@ async def voice_listen_recommendation(
 
 @app.post("/voice/stt", tags=["Voice"])
 async def voice_stt(
+    request: Request,
     file: UploadFile = File(...),
     locale: str = Form("en"),
 ):
     """Transcribe a spoken vignette (browser mic recording) into text for /recommend."""
+    rate_limit(request, limit=15, window_sec=60, bucket="voice")
     if not voice_configured():
         raise HTTPException(
             status_code=503,
@@ -705,10 +764,15 @@ _DISCLAIMER = "Educational reference from classical sources — not a diagnosis 
 
 
 @app.post("/ask", tags=["Ask"])
-async def ask(req: AskRequest, user: Optional[AuthUser] = Depends(get_optional_user)):
+async def ask(
+    req: AskRequest,
+    request: Request,
+    user: Optional[AuthUser] = Depends(get_optional_user),
+):
     """Question answering grounded in the 16k+ verse corpus.
     Query expansion via synonyms → FTS retrieval → citation-bound answer.
     Optional LLM narration when a key is configured; retrieval always decides content."""
+    rate_limit(request, limit=30, window_sec=60, bucket="ask")
     question = (req.question or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="Question is required")
@@ -719,7 +783,7 @@ async def ask(req: AskRequest, user: Optional[AuthUser] = Depends(get_optional_u
     if locale not in {"en", "gu"}:
         locale = "en"
 
-    cache_key = (" ".join(question.lower().split()), locale)
+    cache_key = (CORPUS_VERSION, " ".join(question.lower().split()), locale)
     cached = _ASK_CACHE.get(cache_key)
     if cached is not None and _llm_client is None:
         return {**cached, "cached": True}

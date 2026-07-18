@@ -1740,3 +1740,60 @@ body.locale-gu .veda-preset-label {
   cursor: pointer;
 }
 .veda-ask-listen:hover { background: var(--veda-harita-soft); }
+
+/* Error banner + results toolbar + voice disabled */
+.veda-error-banner {
+  background: var(--veda-agni-soft);
+  border: 1px solid var(--veda-agni);
+  color: var(--veda-agni);
+  border-radius: var(--veda-radius);
+  padding: 0.75rem 1rem;
+  font-size: 0.88rem;
+}
+.veda-error-banner p { margin: 0 0 0.5rem; }
+.veda-error-banner-actions { display: flex; gap: 0.5rem; }
+.veda-error-banner-actions button {
+  border: 1px solid var(--veda-agni);
+  background: #fff;
+  color: var(--veda-agni);
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.veda-error-banner-actions button.is-ghost { background: transparent; }
+.veda-results-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.veda-hint-text { font-size: 0.8rem; color: var(--veda-fog); }
+.veda-hero-secondary-hint {
+  margin: 0.4rem 0 0.75rem;
+  font-size: 0.82rem;
+  color: rgba(247, 249, 248, 0.65);
+}
+.veda-hero-error { margin: 0.75rem 0; max-width: 560px; }
+.veda-mic-btn.is-disabled { opacity: 0.55; cursor: not-allowed; }
+.veda-mic-hint { font-size: 0.72rem; color: var(--veda-fog); margin-left: 0.5rem; }
+.veda-detail-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.veda-case-context {
+  background: var(--veda-harita-soft);
+  border-radius: var(--veda-radius);
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  color: var(--veda-ink-soft);
+}
+.veda-case-context p { margin: 0.2rem 0; }
+.veda-sense-demo {
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  background: var(--veda-tamra-soft);
+  border: 1px solid var(--veda-tamra);
+  border-radius: var(--veda-radius-lg);
+}
+.veda-sense-demo h3 { color: var(--veda-tamra); margin-bottom: 0.4rem; font-size: 1rem; }
+.veda-sense-demo p { font-size: 0.9rem; color: var(--veda-ink); line-height: 1.5; }

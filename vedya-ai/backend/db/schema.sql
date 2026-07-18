@@ -147,6 +147,16 @@ CREATE TABLE IF NOT EXISTS "references" (
 CREATE INDEX IF NOT EXISTS idx_refs_work    ON "references"(work);
 CREATE INDEX IF NOT EXISTS idx_refs_sthana  ON "references"(sthana);
 
+-- Full-text search for RAG (Ask the Texts)
+ALTER TABLE "references" ADD COLUMN IF NOT EXISTS fts tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', coalesce(excerpt_text, ''))) STORED;
+CREATE INDEX IF NOT EXISTS idx_refs_fts ON "references" USING GIN (fts);
+
+-- Prevent duplicate Charaka verse loads
+CREATE UNIQUE INDEX IF NOT EXISTS uq_refs_charaka_verse
+  ON "references" (sthana, chapter, verse_id)
+  WHERE work = 'Charaka Samhita';
+
 -- Yoga ↔ Reference (many-to-many)
 CREATE TABLE IF NOT EXISTS yoga_references (
     yoga_id         UUID NOT NULL REFERENCES yogas(yoga_id) ON DELETE CASCADE,

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/app-context";
 import { api, AskResponse } from "@/lib/api";
 
@@ -11,11 +12,16 @@ interface ChatTurn {
   error?: string;
 }
 
-const SUGGESTIONS = [
+const SUGGESTIONS_EN = [
   "What is the treatment for fever with cough?",
   "Which formulations help in common cold (Pinasa)?",
+  "What do the texts say about Kapha type fever?",
+];
+
+const SUGGESTIONS_GU = [
   "mane tav ane khansi chhe",
   "તાવ અને ઉધરસ માટે કયો યોગ યોગ્ય છે?",
+  "mane sardi ane tav chhe",
 ];
 
 function citation(p: AskResponse["passages"][number]): string {
@@ -28,6 +34,7 @@ function citation(p: AskResponse["passages"][number]): string {
 
 export default function AskPage() {
   const { t, locale } = useApp();
+  const router = useRouter();
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,6 +42,21 @@ export default function AskPage() {
   const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const suggestions = locale === "gu" ? SUGGESTIONS_GU : SUGGESTIONS_EN;
+
+  const rankFromAsk = (res: AskResponse) => {
+    const concepts = res.concepts.map((c) => c.canonical_name);
+    const symptoms = res.concepts.map((c) => c.surface_form);
+    sessionStorage.setItem(
+      "vedya_ask_prefill",
+      JSON.stringify({
+        free_text: res.question,
+        symptoms: Array.from(new Set([...symptoms, ...concepts])),
+        rogas: concepts,
+      })
+    );
+    router.push("/results?intake=true");
+  };
 
   useEffect(() => {
     api.voiceStatus().then((s) => setVoiceReady(s.configured)).catch(() => setVoiceReady(false));
@@ -97,7 +119,7 @@ export default function AskPage() {
             <p className="veda-ask-hint">{t("askEmptyHint")}</p>
             <div className="veda-ask-suggestions">
               <span className="veda-ask-try">{t("askTryOne")}:</span>
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button key={s} type="button" className="veda-ask-chip" onClick={() => submit(s)}>
                   {s}
                 </button>
@@ -174,6 +196,15 @@ export default function AskPage() {
                           </li>
                         ))}
                       </ul>
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          className="veda-link-btn veda-link-btn-primary"
+                          onClick={() => rankFromAsk(turn.response!)}
+                        >
+                          {t("askRankCase")} →
+                        </button>
+                      </div>
                     </div>
                   )}
 

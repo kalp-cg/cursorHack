@@ -103,7 +103,7 @@ def retrieve_candidates(
         cur.execute(
             """
             SELECT ing.ingredient_name, ing.sense_override, d.botanical_name,
-                   ps.rasa, ps.guna, ps.virya, ps.vipaka
+                   ps.rasa, ps.guna, ps.virya, ps.vipaka, ps.pacify, ps.aggravate
             FROM yoga_ingredients ing
             LEFT JOIN dravyas d ON ing.dravya_id = d.dravya_id
             LEFT JOIN property_sets ps ON d.dravya_id = ps.dravya_id
@@ -120,12 +120,13 @@ def retrieve_candidates(
                 "guna": r[4],
                 "virya": r[5],
                 "vipaka": r[6],
+                "pacify": r[7] or [],
+                "aggravate": r[8] or [],
             }
             for r in cur.fetchall()
         ]
 
-        candidates.append(
-            {
+        cand = {
                 "yoga_id": yoga_id,
                 "yoga_name": row[1],
                 "kalpana_name": row[2],
@@ -144,7 +145,13 @@ def retrieve_candidates(
                 "references": refs,
                 "ingredients": ingredients,
             }
-        )
+        # Apply kalpana filter when requested
+        if frame.kalpana_filter:
+            kf = frame.kalpana_filter.lower()
+            name = (cand.get("kalpana_name") or "").lower()
+            if kf not in name:
+                continue
+        candidates.append(cand)
 
     cur.close()
     return candidates

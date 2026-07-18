@@ -16,17 +16,26 @@ cp .env.example .env
 # 2. Start all services
 docker compose up -d
 
-# 3. Load data (first time only)
-docker exec vedya_api bash -c "cd /app && pip install psycopg2-binary pyyaml && python3 /app/data/../scripts/run_all_loaders.sh"
+# 3. Load data (first time / after empty volume)
+# From host (Postgres on localhost:5433):
+cd scripts
+DATABASE_URL=postgresql://vedya:vedyapass@localhost:5433/vedyaai bash run_all_loaders.sh
+# Rebuild the unified RAG corpus + upsert Charaka verses:
+DATABASE_URL=postgresql://vedya:vedyapass@localhost:5433/vedyaai python3 build_corpus.py --load
 
-# Or run from scripts/ directory:
-cd scripts && DATABASE_URL=postgresql://vedya:vedyapass@localhost:5432/vedyaai bash run_all_loaders.sh
+# Auth tables: applied automatically on fresh Docker via 02_auth.sql.
+# On an existing volume, apply once:
+#   docker exec -i vedya_postgres psql -U vedya -d vedyaai < backend/db/auth_schema.sql
 
 # 4. Open the app
 open http://localhost:3000
 open http://localhost:8000/docs  # API docs
+
+# 5. Golden regression tests (API must be running)
+cd backend && pip install pytest && API_BASE=http://localhost:8000 pytest tests/test_golden.py -q
 ```
 
+**Production notes:** set `VEDYA_ENV=production` and a strong `JWT_SECRET`; set `FRONTEND_ORIGINS` to your deployed frontend URL; keep `WEB_CONCURRENCY=1` until the DB pool is load-tested, then raise carefully.
 ---
 
 ## Development Setup

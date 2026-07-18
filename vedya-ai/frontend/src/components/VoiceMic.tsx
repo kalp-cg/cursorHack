@@ -71,7 +71,22 @@ export default function VoiceMic({ onTranscript, className = "" }: Props) {
     else void startRecording();
   }
 
-  if (configured === false) return null;
+  if (configured === false) {
+    return (
+      <div className={`veda-mic-wrap ${className}`}>
+        <button
+          type="button"
+          className="veda-mic-btn is-disabled"
+          disabled
+          title={t("voiceNeedsKey")}
+        >
+          <span className="veda-mic-dot" aria-hidden />
+          <span>{t("voiceOff")}</span>
+        </button>
+        <span className="veda-mic-hint">{t("voiceNeedsKey")}</span>
+      </div>
+    );
+  }
 
   return (
     <div className={`veda-mic-wrap ${className}`}>

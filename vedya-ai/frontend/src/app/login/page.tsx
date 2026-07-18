@@ -1,19 +1,26 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useApp } from "@/lib/app-context";
 import PrimaryButton from "@/components/PrimaryButton";
 
-export default function LoginPage() {
+function safeReturnTo(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t, setSession } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -22,7 +29,7 @@ export default function LoginPage() {
     try {
       const res = await api.login({ email, password });
       setSession(res.access_token, res.user);
-      router.push("/");
+      router.push(returnTo);
     } catch {
       setError(t("authError"));
     } finally {
@@ -67,9 +74,18 @@ export default function LoginPage() {
           </PrimaryButton>
         </form>
         <p className="veda-auth-footer">
-          {t("noAccount")} <Link href="/signup">{t("signup")}</Link>
+          {t("noAccount")}{" "}
+          <Link href={`/signup?returnTo=${encodeURIComponent(returnTo)}`}>{t("signup")}</Link>
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

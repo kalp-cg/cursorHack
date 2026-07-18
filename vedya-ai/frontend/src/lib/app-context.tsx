@@ -42,7 +42,7 @@ function applyDocumentLocale(next: Locale) {
   if (typeof document === "undefined") return;
   document.documentElement.lang = next === "gu" ? "gu" : "en";
   document.documentElement.dataset.locale = next;
-  document.body.classList.remove("locale-en", "locale-hi", "locale-gu");
+  document.body.classList.remove("locale-en", "locale-gu");
   document.body.classList.add(`locale-${next}`);
 }
 

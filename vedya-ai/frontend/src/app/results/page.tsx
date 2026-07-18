@@ -23,8 +23,37 @@ import { TranslatedText } from "@/components/TranslatedText";
 import ScoreBreakdown from "@/components/ScoreBreakdown";
 import SensePanel from "@/components/SensePanel";
 import DiscriminationCard from "@/components/DiscriminationCard";
+import ErrorBanner from "@/components/ErrorBanner";
 import { useApp } from "@/lib/app-context";
 import Link from "next/link";
+
+function mergeGuestFollowUp(prevRaw: string | null, followText: string, locale: string): VignetteInput {
+  let prev: VignetteInput = {
+    free_text: "",
+    symptoms: [],
+    rogas: [],
+    comorbidities: [],
+    top_k: 10,
+    locale,
+  };
+  if (prevRaw) {
+    try {
+      prev = { ...prev, ...JSON.parse(prevRaw), locale };
+    } catch {
+      /* ignore */
+    }
+  }
+  const base = (prev.free_text || "").trim();
+  const mergedText = base ? `${base}. Additional note: ${followText.trim()}` : followText.trim();
+  return {
+    ...prev,
+    free_text: mergedText,
+    top_k: prev.top_k || 10,
+    locale,
+    follow_up: false,
+    conversation_id: undefined,
+  };
+}
 
 const COMORBIDITY_KEYS = [
   { key: "comorbidityDiabetes", value: "Diabetes" },
@@ -40,6 +69,21 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
   const [symptomInput, setSymptomInput] = useState("");
   const [selectedComorbs, setSelectedComorbs] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [intakeError, setIntakeError] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("vedya_ask_prefill");
+      if (!raw) return;
+      const data = JSON.parse(raw) as { free_text?: string; symptoms?: string[]; rogas?: string[] };
+      if (data.free_text) setFreeText(data.free_text);
+      const terms = [...(data.symptoms || []), ...(data.rogas || [])].filter(Boolean);
+      if (terms.length) setSymptoms(Array.from(new Set(terms)));
+      sessionStorage.removeItem("vedya_ask_prefill");
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   function addSymptom() {
     const s = symptomInput.trim();
@@ -49,14 +93,20 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
 
   async function handleSubmit() {
     setRunning(true);
-    await onSubmit({
-      free_text: freeText || undefined,
-      symptoms,
-      rogas: [],
-      comorbidities: selectedComorbs,
-      top_k: 10,
-    });
-    setRunning(false);
+    setIntakeError("");
+    try {
+      await onSubmit({
+        free_text: freeText || undefined,
+        symptoms,
+        rogas: [],
+        comorbidities: selectedComorbs,
+        top_k: 10,
+      });
+    } catch (e) {
+      setIntakeError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setRunning(false);
+    }
   }
 
   return (
@@ -67,9 +117,17 @@ function IntakePanel({ onSubmit }: { onSubmit: (inp: VignetteInput) => void }) {
       >
         {t("newCase")}
       </h1>
-      <p className="text-sm mb-8" style={{ color: "var(--veda-ink-soft)" }}>
+      <p className="text-sm mb-2" style={{ color: "var(--veda-ink-soft)" }}>
         {t("newCaseHint")}
       </p>
+      <p className="text-sm mb-8" style={{ color: "var(--veda-fog)" }}>
+        {t("newCaseWhy")}
+      </p>
+      {intakeError && (
+        <div className="mb-4">
+          <ErrorBanner message={intakeError} onDismiss={() => setIntakeError("")} dismissLabel={t("dismiss")} />
+        </div>
+      )}
 
       <label className="block text-sm font-medium mb-1" style={{ color: "var(--veda-ink)" }}>
         {t("vignetteLabel")}
@@ -168,7 +226,20 @@ function ResultsContent() {
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null);
   const [followUp, setFollowUp] = useState("");
   const [asking, setAsking] = useState(false);
+  const [error, setError] = useState("");
   const localeBoot = useRef(true);
+
+  // Prefill intake from Ask → Rank bridge
+  useEffect(() => {
+    if (searchParams.get("intake") !== "true") return;
+    try {
+      const raw = sessionStorage.getItem("vedya_ask_prefill");
+      if (!raw) return;
+      // IntakePanel is local state — stash for IntakePanel via session; cleared after read in intake boot below
+    } catch {
+      /* ignore */
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (searchParams.get("intake") === "true") {
@@ -182,6 +253,7 @@ function ResultsContent() {
       const decoded = decodeCaseParam(caseParam);
       if (decoded) {
         setLoading(true);
+        setError("");
         const payload = { ...decoded, locale: decoded.locale || locale };
         sessionStorage.setItem("vedya_input", JSON.stringify(payload));
         api
@@ -191,7 +263,7 @@ function ResultsContent() {
             sessionStorage.setItem("vedya_results", JSON.stringify(result));
             setResponse(result);
           })
-          .catch(console.error)
+          .catch((e) => setError(e instanceof Error ? e.message : t("rankError")))
           .finally(() => setLoading(false));
         return;
       }
@@ -202,11 +274,16 @@ function ResultsContent() {
       const parsed = JSON.parse(stored) as RecommendationResponse;
       setResponse(parsed);
       if (parsed.conversation_id) setConversationId(parsed.conversation_id);
+      // Auto-select top-2 for compare hint when arriving with results
+      const active = parsed.results.filter((r) => !r.hard_excluded);
+      if (active.length >= 2) {
+        setSelectedForCompare([active[0].yoga_id, active[1].yoga_id]);
+      }
     }
     setLoading(false);
-  }, [searchParams, setConversationId]);
+  }, [searchParams, setConversationId, locale, t]);
 
-  // Re-rank with new locale so explanations switch EN ↔ HI ↔ GU
+  // Re-rank with new locale so explanations switch EN ↔ GU
   useEffect(() => {
     if (localeBoot.current) {
       localeBoot.current = false;
@@ -222,13 +299,14 @@ function ResultsContent() {
         const payload = { ...inp, locale };
         sessionStorage.setItem("vedya_input", JSON.stringify(payload));
         setLoading(true);
+        setError("");
         const result = await api.recommend(payload);
         if (cancelled) return;
         if (result.conversation_id) setConversationId(result.conversation_id);
         sessionStorage.setItem("vedya_results", JSON.stringify(result));
         setResponse(result);
       } catch (e) {
-        console.error(e);
+        if (!cancelled) setError(e instanceof Error ? e.message : t("rankError"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -236,10 +314,11 @@ function ResultsContent() {
     return () => {
       cancelled = true;
     };
-  }, [locale, showIntake, setConversationId]);
+  }, [locale, showIntake, setConversationId, t]);
 
   const handleIntakeSubmit = useCallback(async (inp: VignetteInput) => {
     setLoading(true);
+    setError("");
     try {
       const payload = { ...inp, locale };
       const result = await api.recommend(payload);
@@ -248,48 +327,51 @@ function ResultsContent() {
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       setResponse(result);
       setShowIntake(false);
+      const active = result.results.filter((r) => !r.hard_excluded);
+      if (active.length >= 2) {
+        setSelectedForCompare([active[0].yoga_id, active[1].yoga_id]);
+      }
     } catch (e) {
-      console.error(e);
+      setError(e instanceof Error ? e.message : t("rankError"));
     } finally {
       setLoading(false);
     }
-  }, [locale, setConversationId]);
+  }, [locale, setConversationId, t]);
 
   async function askFollowUp() {
     if (!followUp.trim()) return;
     setAsking(true);
+    setError("");
     try {
-      const result = await api.recommend({
-        free_text: followUp.trim(),
-        symptoms: [],
-        rogas: [],
-        comorbidities: [],
-        top_k: 10,
-        locale,
-        conversation_id: user
-          ? conversationId || response?.conversation_id || undefined
-          : undefined,
-        follow_up: Boolean(user && (conversationId || response?.conversation_id)),
-      });
-      if (result.conversation_id) setConversationId(result.conversation_id);
-      sessionStorage.setItem("vedya_results", JSON.stringify(result));
-      sessionStorage.setItem(
-        "vedya_input",
-        JSON.stringify({
+      const isLoggedIn = Boolean(user && (conversationId || response?.conversation_id));
+      let payload: VignetteInput;
+      if (isLoggedIn) {
+        payload = {
           free_text: followUp.trim(),
           symptoms: [],
           rogas: [],
           comorbidities: [],
           top_k: 10,
           locale,
-          conversation_id: result.conversation_id,
+          conversation_id: conversationId || response?.conversation_id || undefined,
           follow_up: true,
-        })
-      );
+        };
+      } else {
+        // Guest: merge into full vignette client-side so teaching continuity works
+        payload = mergeGuestFollowUp(
+          sessionStorage.getItem("vedya_input"),
+          followUp.trim(),
+          locale
+        );
+      }
+      const result = await api.recommend(payload);
+      if (result.conversation_id) setConversationId(result.conversation_id);
+      sessionStorage.setItem("vedya_results", JSON.stringify(result));
+      sessionStorage.setItem("vedya_input", JSON.stringify({ ...payload, follow_up: false }));
       setResponse(result);
       setFollowUp("");
     } catch (e) {
-      console.error(e);
+      setError(e instanceof Error ? e.message : t("rankError"));
     } finally {
       setAsking(false);
     }
@@ -304,12 +386,21 @@ function ResultsContent() {
   }
 
   if (showIntake) {
-    return <IntakePanel onSubmit={handleIntakeSubmit} />;
+    return (
+      <div>
+        {error && (
+          <div className="max-w-2xl mx-auto px-6 pt-6">
+            <ErrorBanner message={error} onDismiss={() => setError("")} dismissLabel={t("dismiss")} />
+          </div>
+        )}
+        <IntakePanel onSubmit={handleIntakeSubmit} />
+      </div>
+    );
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--veda-shila)" }}>
+      <div className="flex items-center justify-center min-h-[60vh]" style={{ background: "var(--veda-shila)" }}>
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3" style={{ borderColor: "var(--veda-harita)" }} />
           <p style={{ color: "var(--veda-ink-soft)", fontFamily: "var(--font-ui)" }}>{t("rankingFormulations")}</p>
@@ -320,7 +411,12 @@ function ResultsContent() {
 
   if (!response) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen" style={{ background: "var(--veda-shila)" }}>
+      <div className="flex flex-col items-center justify-center min-h-[60vh]" style={{ background: "var(--veda-shila)" }}>
+        {error && (
+          <div className="mb-4 max-w-md px-6">
+            <ErrorBanner message={error} onDismiss={() => setError("")} dismissLabel={t("dismiss")} />
+          </div>
+        )}
         <p style={{ color: "var(--veda-ink-soft)" }}>{t("noResults")}</p>
         <PrimaryButton className="mt-4" onClick={() => router.push("/")}>{t("goHome")}</PrimaryButton>
       </div>
@@ -329,34 +425,45 @@ function ResultsContent() {
 
   const activeResults = response.results.filter((r) => !r.hard_excluded);
   const topResult = activeResults[0];
+  const secondResult = activeResults[1];
   const globalAlerts: SafetyViolation[] = response.safety_alerts;
 
   return (
     <div style={{ background: "var(--veda-shila)", minHeight: "100vh", fontFamily: "var(--font-ui)" }}>
-      {/* Sticky top bar */}
-      <div
-        className="sticky top-0 z-20 px-6 py-3 flex items-center gap-4 flex-wrap"
-        style={{ background: "var(--veda-ink)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}
-      >
-        <button onClick={() => router.push("/")} className="text-sm" style={{ color: "rgba(247,249,248,0.6)" }}>← VedyaAI</button>
-        <div className="flex-1">
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        <div className="veda-results-toolbar mb-5">
           <CaseChip
             summary={response.vignette_summary}
             comorbidities={response.results[0]?.safety_violations.length ? [t("constraintsActive")] : []}
             onReset={() => router.push("/")}
           />
+          <div className="veda-compare-hint">
+            {selectedForCompare.length === 2 ? (
+              <PrimaryButton
+                size="sm"
+                onClick={() =>
+                  router.push(`/compare?a=${selectedForCompare[0]}&b=${selectedForCompare[1]}`)
+                }
+              >
+                {t("compareSelected")} →
+              </PrimaryButton>
+            ) : (
+              <span className="veda-hint-text">{t("selectTwoCompare")}</span>
+            )}
+          </div>
         </div>
-        {selectedForCompare.length === 2 && (
-          <PrimaryButton
-            size="sm"
-            onClick={() => router.push(`/compare?a=${selectedForCompare[0]}&b=${selectedForCompare[1]}`)}
-          >
-            {t("compareSelected")} →
-          </PrimaryButton>
-        )}
-      </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8">
+        {error && (
+          <div className="mb-4">
+            <ErrorBanner
+              message={error}
+              onDismiss={() => setError("")}
+              dismissLabel={t("dismiss")}
+              retryLabel={t("retry")}
+            />
+          </div>
+        )}
+
         <div className="veda-results-meta mb-5">
           <span className="veda-chip-meta">
             {response.llm_used ? t("modeLlm") : t("modeTemplate")}
@@ -366,7 +473,6 @@ function ResultsContent() {
           </span>
         </div>
 
-        {/* Resolved terms */}
         {response.resolved_concepts.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4">
             {response.resolved_concepts.map((rc) => (
@@ -380,10 +486,7 @@ function ResultsContent() {
 
         <SensePanel items={response.sense_disambiguations || []} />
 
-        {/* 1. Safety panel */}
-        {globalAlerts.length > 0 && <SafetyPanel violations={globalAlerts} />}
-
-        {/* 2. Top pick */}
+        {/* 1. Top pick */}
         {topResult && (
           <div
             className="rounded-2xl p-6 mb-4"
@@ -429,11 +532,6 @@ function ResultsContent() {
                 summary={topResult.explanation?.summary || ""}
               />
             </div>
-            {topResult.rank_features && (
-              <div className="mb-4">
-                <ScoreBreakdown features={topResult.rank_features} />
-              </div>
-            )}
             {topResult.references.slice(0, 2).map((r) => (
               <CitationCard key={r.ref_id} reference={r} />
             ))}
@@ -445,7 +543,7 @@ function ResultsContent() {
                 style={{ color: "var(--veda-ink-soft)" }}
               />
             )}
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap gap-2">
               <PrimaryButton
                 size="sm"
                 variant="outline"
@@ -453,10 +551,22 @@ function ResultsContent() {
               >
                 {t("viewDetail")} →
               </PrimaryButton>
+              {secondResult && (
+                <PrimaryButton
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    router.push(`/compare?a=${topResult.yoga_id}&b=${secondResult.yoga_id}`)
+                  }
+                >
+                  {t("compareWithSecond")} →
+                </PrimaryButton>
+              )}
             </div>
           </div>
         )}
 
+        {/* 2. Why A over B */}
         {activeResults.length >= 2 && (
           <DiscriminationCard
             a={activeResults[0]}
@@ -472,15 +582,17 @@ function ResultsContent() {
           <span>{t("teachingTipBody")}</span>
         </div>
 
-        <CounterfactualPanel
-          baseline={response}
-          onApplied={(next) => {
-            setResponse(next);
-            if (next.conversation_id) setConversationId(next.conversation_id);
-          }}
-        />
+        {/* 3. Safety */}
+        {globalAlerts.length > 0 && <SafetyPanel violations={globalAlerts} />}
 
-        {/* 4. Full ranked list */}
+        {/* 4. Score breakdown for top */}
+        {topResult?.rank_features && (
+          <div className="mb-6">
+            <ScoreBreakdown features={topResult.rank_features} />
+          </div>
+        )}
+
+        {/* 5. Full ranked list */}
         <h3 className="veda-list-title">{t("candidates")}</h3>
         <div className="space-y-2">
           {response.results.map((r, idx) => (
@@ -499,14 +611,12 @@ function ResultsContent() {
           ))}
         </div>
 
-        {/* 5. Coverage note */}
         {response.coverage_note && (
           <div className="mt-4">
             <CoverageNote note={response.coverage_note} />
           </div>
         )}
 
-        {/* Learn drawer link */}
         {response.resolved_concepts.length > 0 && (
           <div className="mt-6 text-center">
             <button
@@ -519,7 +629,15 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* Follow-up conversation — open to guests for usefulness */}
+        {/* 6. Tools: counterfactual + follow-up */}
+        <CounterfactualPanel
+          baseline={response}
+          onApplied={(next) => {
+            setResponse(next);
+            if (next.conversation_id) setConversationId(next.conversation_id);
+          }}
+        />
+
         <div
           className="mt-8 rounded-2xl p-5"
           style={{ background: "var(--veda-surface)", border: "1px solid var(--veda-fog)" }}
@@ -545,7 +663,10 @@ function ResultsContent() {
             </div>
             <VoiceMic onTranscript={(text) => setFollowUp((prev) => (prev ? `${prev} ${text}` : text))} />
             {!user && (
-              <Link href="/signup" style={{ color: "var(--veda-harita)", fontSize: "0.85rem" }}>
+              <Link
+                href={`/signup?returnTo=${encodeURIComponent("/results")}`}
+                style={{ color: "var(--veda-harita)", fontSize: "0.85rem" }}
+              >
                 {t("signup")} → {t("history")}
               </Link>
             )}
@@ -554,7 +675,6 @@ function ResultsContent() {
 
         <ShareCaseBar response={response} />
 
-        {/* Stats */}
         <div className="mt-8 grid grid-cols-3 gap-4 text-center">
           {[
             { label: t("candidates"), value: response.total_candidates },

@@ -38,19 +38,46 @@ export default function DetailPage() {
   const { t } = useApp();
   const [detail, setDetail] = useState<FormulationDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [compareId, setCompareId] = useState<string | null>(null);
+  const [caseSummary, setCaseSummary] = useState<string | null>(null);
+  const [matchedPrimary, setMatchedPrimary] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("vedya_results");
+      if (!raw) return;
+      const res = JSON.parse(raw) as {
+        vignette_summary?: string;
+        results?: Array<{
+          yoga_id: string;
+          hard_excluded?: boolean;
+          primary_indications?: string[];
+        }>;
+      };
+      if (res.vignette_summary) setCaseSummary(res.vignette_summary);
+      const active = (res.results || []).filter((r) => !r.hard_excluded);
+      const mine = active.find((r) => r.yoga_id === yogaId);
+      if (mine?.primary_indications) setMatchedPrimary(mine.primary_indications.slice(0, 4));
+      const other = active.find((r) => r.yoga_id !== yogaId);
+      if (other) setCompareId(other.yoga_id);
+    } catch {
+      /* ignore */
+    }
+  }, [yogaId]);
 
   useEffect(() => {
     if (!yogaId) return;
     api
       .getFormulation(yogaId)
       .then(setDetail)
-      .catch(console.error)
+      .catch((e) => setError(e instanceof Error ? e.message : t("notInCorpus")))
       .finally(() => setLoading(false));
-  }, [yogaId]);
+  }, [yogaId, t]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--veda-shila)" }}>
+      <div className="flex items-center justify-center min-h-[60vh]" style={{ background: "var(--veda-shila)" }}>
         <div
           className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
           style={{ borderColor: "var(--veda-harita)" }}
@@ -61,10 +88,10 @@ export default function DetailPage() {
 
   if (!detail) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen" style={{ background: "var(--veda-shila)" }}>
-        <p style={{ color: "var(--veda-ink-soft)" }}>{t("notInCorpus")}</p>
-        <PrimaryButton className="mt-4" onClick={() => router.back()}>
-          {t("goBack")}
+      <div className="flex flex-col items-center justify-center min-h-[60vh]" style={{ background: "var(--veda-shila)" }}>
+        <p style={{ color: "var(--veda-ink-soft)" }}>{error || t("notInCorpus")}</p>
+        <PrimaryButton className="mt-4" onClick={() => router.push("/results")}>
+          {t("backToResults")}
         </PrimaryButton>
       </div>
     );
@@ -75,16 +102,37 @@ export default function DetailPage() {
 
   return (
     <div style={{ background: "var(--veda-shila)", minHeight: "100vh", fontFamily: "var(--font-ui)" }}>
-      <div className="sticky top-0 z-10 px-6 py-3 flex items-center gap-4" style={{ background: "var(--veda-ink)" }}>
-        <button onClick={() => router.back()} className="text-sm" style={{ color: "rgba(247,249,248,0.6)" }}>
-          ← {t("goBack")}
-        </button>
-        <span className="text-base font-semibold" style={{ fontFamily: "var(--font-display)", color: "#F7F9F8" }}>
-          {t("detailTitle")}
-        </span>
-      </div>
-
       <div className="max-w-3xl mx-auto px-6 py-8">
+        <div className="veda-detail-nav mb-6">
+          <PrimaryButton size="sm" variant="outline" onClick={() => router.push("/results")}>
+            ← {t("backToResults")}
+          </PrimaryButton>
+          {compareId && (
+            <PrimaryButton
+              size="sm"
+              variant="outline"
+              onClick={() => router.push(`/compare?a=${yogaId}&b=${compareId}`)}
+            >
+              {t("compareWithSecond")} →
+            </PrimaryButton>
+          )}
+        </div>
+
+        {(caseSummary || matchedPrimary.length > 0) && (
+          <div className="veda-case-context mb-6">
+            {caseSummary && (
+              <p>
+                <strong>{t("caseContext")}:</strong> {caseSummary}
+              </p>
+            )}
+            {matchedPrimary.length > 0 && (
+              <p>
+                <strong>{t("matchedInCase")}:</strong> {matchedPrimary.join(" · ")}
+              </p>
+            )}
+          </div>
+        )}
+
         <h1 className="text-3xl font-medium mb-1" style={{ fontFamily: "var(--font-display)", color: "var(--veda-ink)" }}>
           {detail.name}
         </h1>
@@ -222,8 +270,8 @@ export default function DetailPage() {
           )}
         </section>
 
-        <PrimaryButton variant="outline" onClick={() => router.back()}>
-          ← {t("goBack")}
+        <PrimaryButton variant="outline" onClick={() => router.push("/results")}>
+          ← {t("backToResults")}
         </PrimaryButton>
       </div>
     </div>

@@ -19,7 +19,8 @@ from urllib.parse import quote
 import httpx
 
 _CACHE: dict[str, str] = {}
-_SUPPORTED = {"en", "hi", "gu"}
+_CACHE_MAX = 2000
+_SUPPORTED = {"en", "gu"}
 _LAST_PROVIDER = "none"
 
 # Public LibreTranslate endpoints (tried in order)
@@ -202,7 +203,10 @@ async def translate_texts(
                 print(f"✗ Translation failed ({e})")
                 result, provider = src, "none"
             out[orig_i] = result
-            _CACHE[_cache_key(src, source, target)] = result
+            key = _cache_key(src, source, target)
+            if len(_CACHE) >= _CACHE_MAX and key not in _CACHE:
+                _CACHE.pop(next(iter(_CACHE)))
+            _CACHE[key] = result
             providers_used.append(provider)
 
     # Prefer reporting a real provider if any succeeded

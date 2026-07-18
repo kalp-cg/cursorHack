@@ -35,7 +35,7 @@ class SignupRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=254)
     password: str = Field(..., min_length=8, max_length=128)
     display_name: Optional[str] = Field(None, max_length=120)
-    preferred_locale: str = Field("en", pattern="^(en|hi|gu)$")
+    preferred_locale: str = Field("en", pattern="^(en|gu)$")
 
 
 class LoginRequest(BaseModel):
@@ -203,17 +203,23 @@ def authenticate_user(db, req: LoginRequest) -> AuthUser:
 def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
 ) -> Optional[AuthUser]:
-    """Attach user if Bearer token present; otherwise None (guest)."""
+    """Attach user if Bearer token present; otherwise None (guest).
+    Re-fetches from DB so deactivated users / role demotions take effect immediately."""
     if credentials is None:
         return None
     payload = decode_token(credentials.credentials)
-    # Lazy DB lookup deferred to route via user_id in token for speed;
-    # routes that need full profile should re-fetch.
+    from db_pool import get_connection
+
+    with get_connection() as db:
+        row = fetch_user_by_id(db, str(payload["sub"]))
+    if not row or not row.get("is_active"):
+        return None
     return AuthUser(
-        user_id=str(payload["sub"]),
-        email=str(payload.get("email", "")),
-        preferred_locale="en",
-        role=str(payload.get("role", "user")),
+        user_id=row["user_id"],
+        email=row["email"],
+        display_name=row.get("display_name"),
+        preferred_locale=row.get("preferred_locale") or "en",
+        role=row.get("role") or "user",
     )
 
 
@@ -223,16 +229,25 @@ def require_user(
     if credentials is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     payload = decode_token(credentials.credentials)
+    from db_pool import get_connection
+
+    with get_connection() as db:
+        row = fetch_user_by_id(db, str(payload["sub"]))
+    if not row:
+        raise HTTPException(status_code=401, detail="User not found")
+    if not row.get("is_active"):
+        raise HTTPException(status_code=401, detail="Account deactivated")
     return AuthUser(
-        user_id=str(payload["sub"]),
-        email=str(payload.get("email", "")),
-        preferred_locale="en",
-        role=str(payload.get("role", "user")),
+        user_id=row["user_id"],
+        email=row["email"],
+        display_name=row.get("display_name"),
+        preferred_locale=row.get("preferred_locale") or "en",
+        role=row.get("role") or "user",
     )
 
 
 def require_admin(user: AuthUser = Depends(require_user)) -> AuthUser:
-    """Admin-only gate — corpus curators / faculty administrators."""
+    """Admin-only gate — role always from live DB via require_user."""
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user

@@ -6,6 +6,7 @@ import { api, PresetVignette } from "@/lib/api";
 import PrimaryButton from "@/components/PrimaryButton";
 import VoiceMic from "@/components/VoiceMic";
 import ListenButton from "@/components/ListenButton";
+import ErrorBanner from "@/components/ErrorBanner";
 import { useApp } from "@/lib/app-context";
 
 const PRESET_META: Record<string, { badgeKey: string; order: number }> = {
@@ -74,10 +75,14 @@ export default function HomePage() {
   const [loadingPreset, setLoadingPreset] = useState<string | null>(null);
   const [freeText, setFreeText] = useState("");
   const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    api.getPresets(locale).then(setPresets).catch(console.error);
-  }, [locale]);
+    api
+      .getPresets(locale)
+      .then(setPresets)
+      .catch(() => setError(t("loadPresetsError")));
+  }, [locale, t]);
 
   const sortedPresets = [...presets].sort((a, b) => {
     const oa = PRESET_META[a.id]?.order ?? 99;
@@ -87,6 +92,7 @@ export default function HomePage() {
 
   async function runPreset(presetId: string) {
     setLoadingPreset(presetId);
+    setError("");
     try {
       const result = await api.runPreset(presetId, locale);
       if (result.conversation_id) setConversationId(result.conversation_id);
@@ -100,7 +106,7 @@ export default function HomePage() {
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       router.push("/results");
     } catch (e) {
-      console.error(e);
+      setError(e instanceof Error ? e.message : t("rankError"));
     } finally {
       setLoadingPreset(null);
     }
@@ -109,6 +115,7 @@ export default function HomePage() {
   async function runFreeText() {
     if (!freeText.trim()) return;
     setRunning(true);
+    setError("");
     try {
       const result = await api.recommend({
         free_text: freeText,
@@ -133,7 +140,7 @@ export default function HomePage() {
       sessionStorage.setItem("vedya_results", JSON.stringify(result));
       router.push("/results");
     } catch (e) {
-      console.error(e);
+      setError(e instanceof Error ? e.message : t("rankError"));
     } finally {
       setRunning(false);
     }
@@ -166,6 +173,18 @@ export default function HomePage() {
               {t("newCase")}
             </PrimaryButton>
           </div>
+          <p className="veda-hero-secondary-hint">{t("newCaseWhy")}</p>
+
+          {error && (
+            <div className="veda-hero-error">
+              <ErrorBanner
+                message={error}
+                onDismiss={() => setError("")}
+                dismissLabel={t("dismiss")}
+                retryLabel={t("retry")}
+              />
+            </div>
+          )}
 
           <div className="veda-search-row veda-search-row-hero">
             <input
@@ -181,6 +200,7 @@ export default function HomePage() {
               {running ? t("ranking") : t("rank")}
             </PrimaryButton>
           </div>
+          <p className="veda-hero-secondary-hint">{t("freeTextSecondary")}</p>
 
           <div className="veda-hero-voice">
             <VoiceMic onTranscript={(text) => setFreeText((prev) => (prev ? `${prev} ${text}` : text))} />

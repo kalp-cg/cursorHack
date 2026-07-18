@@ -39,7 +39,8 @@ def _dosha_from_prakriti(prakriti: str | None) -> list[str]:
 
 def _property_fit(ingredients: list[dict], frame: ClinicalFrame) -> float:
     """
-    Simple dosha fit: score how many ingredients pacify the prakriti dosha.
+    Dosha fit using pacify/aggravate lists from herb data when present.
+    Falls back to rasa heuristics only if pacify is empty.
     Returns normalised 0–1 score.
     """
     if not frame.prakriti or not ingredients:
@@ -50,15 +51,19 @@ def _property_fit(ingredients: list[dict], frame: ClinicalFrame) -> float:
     fit_count = 0
     total = 0
     for ing in ingredients:
-        pacify = ing.get("rasa") or []
-        # Rough heuristic: Tikta+Katu → pacifies Kapha; Madhura → pacifies Vata/Pitta
+        pacify = list(ing.get("pacify") or [])
+        aggravate = list(ing.get("aggravate") or [])
+        rasa = list(ing.get("rasa") or [])
+        if not pacify and rasa:
+            if any(r in ("Tikta", "Katu", "Kashaya") for r in rasa):
+                pacify.append("Kapha")
+            if any(r in ("Madhura", "Amla", "Lavana") for r in rasa):
+                pacify.append("Vata")
+            if any(r in ("Madhura", "Tikta", "Kashaya") for r in rasa):
+                pacify.append("Pitta")
         for dosha in dominant_doshas:
             total += 1
-            if dosha == "Kapha" and any(r in ("Tikta", "Katu", "Kashaya") for r in pacify):
-                fit_count += 1
-            elif dosha == "Vata" and any(r in ("Madhura", "Amla", "Lavana") for r in pacify):
-                fit_count += 1
-            elif dosha == "Pitta" and any(r in ("Madhura", "Tikta", "Kashaya") for r in pacify):
+            if dosha in pacify and dosha not in aggravate:
                 fit_count += 1
     return (fit_count / total) if total else 0.0
 
